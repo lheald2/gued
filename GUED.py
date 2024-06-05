@@ -12,27 +12,31 @@ import numpy.ma as ma
 import scipy.signal as ss
 import scipy.interpolate as interp
 from scipy.optimize import curve_fit
-from scipy.signal import medfilt2d
+
 from scipy.ndimage import median_filter
 from scipy.ndimage import gaussian_filter
 from scipy.interpolate import make_interp_spline
-import skimage.transform as skt
+
 import concurrent.futures
-import matplotlib
-#%matplotlib inline
 
 #Image stuff
 import matplotlib.patches as patches
 from PIL import Image
 from skimage.filters import threshold_otsu
-from skimage.morphology import closing, square
+from skimage.morphology import closing, square, disk
 from skimage.segmentation import clear_border
 from skimage.measure import label, regionprops_table
-from skimage import util
+from skimage import util, draw
+
 
 #Multiprocessing
 import os
 from multiprocessing.dummy import Pool as ThreadPool
+
+### Global Variables for entire code
+CENTER_GUESS = (500, 500)
+RADIUS_GUESS = 40
+DISK_RADIUS = 3
 
 
 ### Reading Images Functions
@@ -231,6 +235,18 @@ def get_image_details(file_names, sort=True, plot=False, filter_data=False): #lo
         stage_pos = stage_pos[idx_sort]
         counts = counts[idx_sort]
 
+    if filter_data == True:
+        min_val = int(input("Enter minimum file number: "))
+        max_val = int(input("Enter maximum file number: "))
+        try:
+            good_range = np.arange(min_val, max_val, 1)
+            data_array = data_array[good_range]
+            stage_pos = stage_pos[good_range]
+            counts = counts[good_range]
+            file_order = file_order[good_range]
+        except:
+            print("Max value is larger than the size of the data range, returning all data")
+
     if plot == True:
         test = data_array[0]
         plt.figure(figsize=[12,10])
@@ -255,23 +271,46 @@ def get_image_details(file_names, sort=True, plot=False, filter_data=False): #lo
         plt.tight_layout()
         plt.show()
 
-    if filterdata == True:
-        min_val = int(input("Enter minimum file number: "))
-        max_val = int(input("Enter maximum file number: "))
-        try:
-            good_range = np.arange(min_val, max_val, 1)
-            data_array = data_array[good_range]
-            stage_pos = stage_pos[good_range]
-            counts = counts[good_range]
-            file_order = file_order[good_range]
-        except:
-            print("Max value is larger than the size of the data range, returning all data")
+        show_counts(stage_pos, counts)
+
 
 
     return data_array, stage_pos, file_order, counts
 
+def show_counts(stage_pos, counts): # todo add docstring
+    counts_mean = np.mean(counts)  # Mean values of Total Counts of all images
+    counts_std = np.std(counts)  # the STD of all the tc for all the iamges
+    uni_stage = np.unique(stage_pos)  # Pump-probe stage position
+    plt.figure(figsize=(12, 4))  # Plot counts rate, images number at each posi, and bad images
 
-def get_image_details_slac(file_names, sort=True): # todo Add image option
+    plt.subplot(1, 3, 1)
+    plt.plot(counts, '-d')
+    plt.axhline(y=counts_mean, color='k', linestyle='-', linewidth=1, label="mean counts");
+    plt.axhline(y=counts_mean - (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="min counts");
+    plt.axhline(y=counts_mean + (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="max counts");
+    plt.xlabel('Images orderd in lab time');
+    plt.ylabel('Counts');
+    plt.legend()
+    plt.title('Total counts');
+
+    plt.subplot(1, 3, 2)  # Histogram the number of images at each posi
+    plt.plot(uni_stage, '-o');
+    plt.xlabel('pp stage posi');
+    plt.ylabel('Stg Position [mm]');
+    plt.title('Delay Stage Position');
+
+    plt.subplot(1, 3, 3)  # Histogram the number of images at each posi
+    posi_edges_bins = np.append(uni_stage - 0.001, uni_stage[-1])
+    posi_hist, posi_edges = np.histogram(stage_pos, bins=posi_edges_bins)
+    plt.plot(uni_stage, posi_hist, '-*')
+    plt.xlabel('pp stage posi [mm]');
+    plt.ylabel('Num of Imges');
+    plt.title('Num of images at each delay');
+
+    plt.tight_layout()
+    plt.show()
+
+def get_image_details_slac(file_names, sort=True): # todo update to look like others
     """
     WORKS FOR CURRENT DATA COLLECTION
     Returns the data loaded from the tif files with a floor subtracted based on the median of the corner. Also returns arrays with the stage positions, the
@@ -323,7 +362,8 @@ def get_image_details_slac(file_names, sort=True): # todo Add image option
     return data_array, stage_pos, file_order, counts
 
 
-def get_image_details_keV(file_names, sort=False):
+def get_image_details_keV(file_names, sort=False, multistage=False):
+    # todo update to look like other get_image_details code and make for one stage
     """
     Returns the data loaded from the tif files with a floor subtracted based on the median of the corner. Also returns arrays with the stage
     positions, the file order number, and the number of counts per image.
@@ -341,47 +381,80 @@ def get_image_details_keV(file_names, sort=False):
 
     """
     data_array = tf.imread(file_names)  # construct array containing files
-
-    try:
-        ir_stage_pos = []
-        uv_stage_pos = []
-        file_order = []
-        current = []
+    if multistage == True:
         try:
-            for file in file_names:
-                string = list(map(str, file.split("/")))
-                string = list(map(str, string[-1].split("_")))
-                file_number = int(string[1])
-                file_order.append(file_number)
-                ir_stage_pos.append(float(string[4]))
-                uv_stage_pos.append(float(string[6]))
-                current.append(float(string[-1][:-5]))
-        except ValueError:
-            raise ValueError("""Failed to convert a file name to a float. Make sure that index positions are correct for all files in file_names. 
-            Also check separators""")
-    except IndexError:
-        raise ValueError(
-            "Invalid index values. Make sure the index values are within the range of the file name strings.")
+            ir_stage_pos = []
+            uv_stage_pos = []
+            file_order = []
+            current = []
+            try:
+                for file in file_names:
+                    string = list(map(str, file.split("/")))
+                    string = list(map(str, string[-1].split("_")))
+                    file_number = int(string[1])
+                    file_order.append(file_number)
+                    ir_stage_pos.append(float(string[4]))
+                    uv_stage_pos.append(float(string[6]))
+                    current.append(float(string[-1][:-5]))
+            except ValueError:
+                raise ValueError("""Failed to convert a file name to a float. Make sure that index positions are correct for all files in file_names. 
+                Also check separators""")
+        except IndexError:
+            raise ValueError(
+                "Invalid index values. Make sure the index values are within the range of the file name strings.")
 
-    ir_stage_pos = np.array(ir_stage_pos)
-    uv_stage_pos = np.array(uv_stage_pos)
-    file_order = np.array(file_order)
-    current = np.array(current)
-    counts = get_counts(data_array)
+        ir_stage_pos = np.array(ir_stage_pos)
+        uv_stage_pos = np.array(uv_stage_pos)
+        file_order = np.array(file_order)
+        current = np.array(current)
+        counts = get_counts(data_array)
 
-    if sort == True:
-        temp_idx = sort_files(file_order, ir_stage_pos, uv_stage_pos)
-        data_array = data_array[temp_idx]
-        ir_stage_pos = ir_stage_pos[temp_idx]
-        uv_stage_pos = uv_stage_pos[temp_idx]
-        file_order = file_order[temp_idx]
-        current = current[temp_idx]
-        counts = counts[temp_idx]
+        if sort == True:
+            temp_idx = sort_files_multistage(file_order, ir_stage_pos, uv_stage_pos)
+            data_array = data_array[temp_idx]
+            ir_stage_pos = ir_stage_pos[temp_idx]
+            uv_stage_pos = uv_stage_pos[temp_idx]
+            file_order = file_order[temp_idx]
+            current = current[temp_idx]
+            counts = counts[temp_idx]
+        return data_array, ir_stage_pos, uv_stage_pos, file_order, counts, current
 
-    return data_array, ir_stage_pos, uv_stage_pos, file_order, counts, current
+    if multistage == False:
+        try:
+            stage_positions = []
+            file_order = []
+            current = []
+            try:
+                for file in file_names:
+                    string = list(map(str, file.split("/")))
+                    string = list(map(str, string[-1].split("_")))
+                    file_number = int(string[1])
+                    file_order.append(file_number)
+                    stage_positions.append(float(string[4]))
+                    current.append(float(string[-1][:-5]))
+            except ValueError:
+                raise ValueError("""Failed to convert a file name to a float. Make sure that index positions are correct for all files in file_names. 
+                Also check separators""")
+        except IndexError:
+            raise ValueError(
+                "Invalid index values. Make sure the index values are within the range of the file name strings.")
 
+        stage_positions = np.array(stage_positions)
+        file_order = np.array(file_order)
+        current = np.array(current)
+        counts = get_counts(data_array)
 
-def sort_files(file_order, ir_stage_pos, uv_stage_pos):
+        if sort == True:
+            temp_idx = sort_files(file_order, stage_positions)
+            data_array = data_array[temp_idx]
+            stage_positions = stage_positions[temp_idx]
+            file_order = file_order[temp_idx]
+            current = current[temp_idx]
+            counts = counts[temp_idx]
+
+    return data_array, stage_positions, file_order, counts, current
+
+def sort_files_multistage(file_order, ir_stage_pos, uv_stage_pos):
     uni_stage_ir = np.unique(ir_stage_pos)  # Pump-probe stage position
     uni_stage_uv = np.unique(uv_stage_pos)
 
@@ -407,6 +480,74 @@ def sort_files(file_order, ir_stage_pos, uv_stage_pos):
     idx_list = np.reshape(idx_list, len(stage_positions))
     return idx_list
 
+def sort_files(file_order, stage_positions):
+    uni_stage= np.unique(stage_positions)  # Pump-probe stage position
+
+    idx_list = []
+
+    for i in range(len(uni_stage)):
+        # file_numbers = file_order[np.where(stage_positions==uni_stage[i])[0]];
+        # file_numbers = file_numbers[idx_temp]
+        stage_idx = np.where(stage_positions == uni_stage[i])[0]
+        file_numbers = file_order[stage_idx]
+        idx_temp = np.argsort(file_numbers)
+        # print(file_numbers[idx_temp])
+        idx_list.append(stage_idx[idx_temp])
+    idx_list = np.array(idx_list)
+    idx_list = np.reshape(idx_list, len(stage_positions))
+    return idx_list
+
+
+def remove_counts(data_array, stage_positions, file_order, counts, std_factor=3, plot=False):
+    """Filters input parameters by removing any data where the total counts falls outside of the set filter. Default
+        value is set to 3 standard deviations from the mean. Returns the same variables as it inputs but with
+        different dimensions.
+
+        Arguments:
+        data_array (ndarray): Multidimensional array of N x 1024 x 1024 where N is the length of file_names list
+        stage_pos (array): One dimensional array of length N containing the stage positions associated with each image.
+        file_order (array): One dimensional array of length N that reflects the order with which the images are taken.
+        counts(ndarray): One dimensional array of length N containing the total counts after summing over each array
+        element.
+
+        Optional Arguments:
+            std_factor (int): Default value is 3. Refers to cut off based on number of standard deviations from the mean.
+            plot (boolean): Default is False. Returns a plot of new and old counts.
+
+        Returns:
+            Returns same variables which it received as arguments with new N value."""
+
+    init_length = len(counts)
+    # Decide to use threshold or selected images
+    counts_mean = np.mean(counts)  # Mean values of Total Counts of all images
+    counts_std = np.std(counts)  # the STD of all the tc for all the iamges
+
+    tc_good = np.squeeze(
+        np.where(abs(counts - counts_mean) < std_factor * counts_std))  # Find out the indices of the low counts images
+    new_array = data_array[tc_good]
+    new_stage_positions = stage_positions[tc_good]
+    new_counts = counts[tc_good]
+    new_file_order = file_order[tc_good]
+
+    print(init_length - len(tc_good), " number of files removed from ", init_length, " initial files")
+
+    if plot == True:
+
+        plt.figure(figsize=(12, 4))  # Plot counts rate, images number at each posi, and bad images
+
+        plt.plot(new_counts, '-d')
+        plt.axhline(y=counts_mean, color='k', linestyle='-', linewidth=1, label="mean counts");
+        plt.axhline(y=counts_mean - (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="min counts");
+        plt.axhline(y=counts_mean + (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="max counts");
+        plt.xlabel('Images orderd in lab time');
+        plt.ylabel('Counts');
+        plt.legend()
+        plt.title('Total counts');
+
+        plt.tight_layout()
+        plt.show()
+
+    return new_array, new_stage_positions, new_file_order, new_counts
 
 ### Cleaning Functions
 
@@ -441,7 +582,6 @@ def _clean_and_filter(data_array_1d):
 
     return filt_data
 
-
 def clean_all(data_array):
     """Takes in a large 3D array of data and applies the scipy.ndimage.median_filter on them in parallel processing using the hidden function
     _clean_and_filter. Need to consider the box size for these filters. Additionally, issues can arise if the data array has nan values.
@@ -461,7 +601,6 @@ def clean_all(data_array):
     print(filtered_data.shape)
     print("Finished cleaning!!")
     return filtered_data
-
 
 def rmv_xrays_all(data_array):
     """ Requires global variables for the mean and standard deviation. Filters out any pixels that are more than 4 times the standard deviation of
@@ -929,22 +1068,21 @@ def mask_generator_alg(dat, mask_center, mask_radius, fill_value=np.nan, add_mas
     return mask
 
 
-def finding_center_alg(dat, disk_radius=3, showingfigure=False, center_guess=(532, 520), radius_guess=80,
-                       title='Reference image', thresh_input=0):
+def finding_center_alg(data_array, plot=False, title='Reference Image', thresh_input=0):
     """
     Algorithm for finding the center of diffraction pattern
 
     Parameters
     ----------
-    dat : 2D array
+    data_array : 2D array
         Diffraction pattern.
-    disk_radius : int, optional
+    DISK_RADIUS : int, optional
         Generates a flat, disk-shaped footprint. The default is 3.
-    showingfigure : boolean, optional
+    plot : boolean, optional
         Show figure of the result of center finding. The default is False.
-    center_guess : tuple contains 2 values, optional
+    CENTER_GUESS : tuple contains 2 values, optional
         Guessing center position to generate temporary mask. The default is (532, 520).
-    radius_guess : int, optional
+    RADIUS_GUESS : int, optional
         Guessing radius of the temporary mask. The default is 80.
     title : str, optional
         Title of the figure. The default is 'Reference image'.
@@ -961,18 +1099,18 @@ def finding_center_alg(dat, disk_radius=3, showingfigure=False, center_guess=(53
     """
 
     if thresh_input == 0:
-        thresh = threshold_otsu(dat)
+        thresh = threshold_otsu(data_array)
     else:
         thresh = thresh_input
 
     cxt, cyt = [], []
     for th in [1]:
         thresh *= th
-        mask_temp = mask_generator_alg(dat, center_guess, radius_guess * th, fill_value=False, add_mask=[],
+        mask_temp = mask_generator_alg(data_array, CENTER_GUESS, RADIUS_GUESS * th, fill_value=False, add_mask=[],
                                        add_rectangular=False, showingfigure=False)
         mask_temp = util.invert(mask_temp.astype(bool))
-        bw = closing(dat > thresh, disk(
-            disk_radius))  # Return grayscale morphological closing of an image. Square(): generate the footprint to close the gap between data points
+        bw = closing(data_array > thresh, disk(
+            DISK_RADIUS))  # Return grayscale morphological closing of an image. Square(): generate the footprint to close the gap between data points
         cleared = clear_border(bw + mask_temp)
         label_image = label(cleared)
         props = regionprops_table(label_image, properties=('centroid',
@@ -988,9 +1126,9 @@ def finding_center_alg(dat, disk_radius=3, showingfigure=False, center_guess=(53
     center_x = np.mean(cxt)
     center_y = np.mean(cyt)
 
-    if showingfigure == True:
+    if plot == True:
         fig, (ax1, ax2, ax3) = plt.subplots(nrows=1, ncols=3, figsize=(20, 10))
-        ax1.imshow(dat)
+        ax1.imshow(data_array)
         ax2.imshow(label_image)
         ax3.imshow(bw)
 
@@ -1020,6 +1158,67 @@ def finding_center_alg(dat, disk_radius=3, showingfigure=False, center_guess=(53
         plt.show()
 
     return center_x, center_y, radius, thresh
+
+def find_center_parallel(data_array, plot=True, print_stats=True):
+    """ Finds center of each image in the data array using concurrent.futures.ThreadPoolExecutor to quickly process
+    many data files.
+
+    Arguments:
+        data_array (ndarray): array of image like data with shape Nx1024x1024
+
+    Optional Arguments:
+        plot (boolean): Default is set to True. When true, plots an image of the values for center_x and center_y
+        with respect to pixel number
+        print_stats (boolean): Default is set to True. Prints the average value for center_x and center_y and prints
+        the percent failure rate.
+
+    Global Variables Used:
+        CENTER_GUESS (tuple): initial guess for center position
+        RADIUS_GUESS (int): initial guess for the radius
+        DISK_RADIUS (int): value for disk radius used in mapping
+
+    Returns:
+        center_x (array): One-dimensional array of x values for the center position of each image
+        center_y (array): One-dimensional array of y values for the center position of each image"""
+
+    center_x = []
+    center_y = []
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        results = executor.map(finding_center_alg, data_array)
+
+    for result in results:
+        center_x.append(result[0])
+        center_y.append(result[1])
+
+    center_x = np.array(center_x)
+    center_y = np.array(center_y)
+    if plot == True:
+        plt.figure(figsize=(10, 10))
+        plt.subplot(2, 1, 1)
+        plt.plot(center_x[:])
+        plt.title("X values for Centers")
+        plt.xlabel("Image Number")
+        plt.ylabel("Pixel Value")
+
+        plt.subplot(2, 1, 2)
+        plt.plot(center_y[:-3])
+        plt.title("Y values for Centers")
+        plt.xlabel("Image Number")
+        plt.ylabel("Pixel Value")
+
+        plt.show()
+    if print_stats == True:
+        x_ave = np.mean(center_x[np.where(center_x != CENTER_GUESS[0])[0]])
+        y_ave = np.mean(center_y[np.where(center_y != CENTER_GUESS[1])[0]])
+        center_x[np.where(center_x == CENTER_GUESS[0])[0]] = x_ave
+        center_y[np.where(center_y == CENTER_GUESS[1])[0]] = y_ave
+        center_ave = x_ave, y_ave
+        print(r'Averaged ctr is ' + str(center_ave))
+        fail_count = np.count_nonzero(np.array(center_x) == CENTER_GUESS[0])
+
+        print(f"Percentage of images where the center finding failed (i.e., found the guess value): {fail_count / len(good_data) * 100}")
+    return center_x, center_y
+
 
 
 ### Azimuthal Averaging and Radial Outlier Removal Functions
@@ -1094,7 +1293,7 @@ def azimuthal_avg_correct(args):
     return I
 
 
-def get_azimuthal_average(data, x, y):
+def get_azimuthal_average(data, x, y): # todo change this to concurrent futures
     """Runs the azimuthal average function in parallel for large data sets."""
     p = ThreadPool(3)
     I = p.map(azimuthal_avg_correct, [(data_i, x, y) for data_i in data])
@@ -1178,11 +1377,16 @@ def remove_radial_outliers(image):
     return new_image
 
 
-def remove_radial_outliers_pool(data):
-    p = ThreadPool(5)
-    I = p.map(remove_radial_outliers, [(data_i) for data_i in data])
-    print("FINISHED")
-    return np.array(I)
+def remove_radial_outliers_parallel(data_array): # todo incorporate center values
+    """ This function takes in an ndarray of images and calculates the average value for each radius in the
+    radially distributed image. To work properly, needs to input center values as well. Still in development"""
+    start = time.perf_counter()
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        clean_data_array = executor.map(remove_radial_outliers, data_array)
+
+    stop = time.perf_counter()
+    print(f"Finished removing radial outliers in {stop-start} seconds.")
+    return np.array(clean_data_array)
 
 
 ### Simulation Functions
@@ -1905,4 +2109,3 @@ def dissoc_sim(path_mol, reactant, products, file_type, f, s000, s_max, r_max=80
 
 ### PDF Generating Functions
 # todo add theses functions
-
