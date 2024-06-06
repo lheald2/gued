@@ -18,6 +18,7 @@ from scipy.ndimage import gaussian_filter
 from scipy.interpolate import make_interp_spline
 
 import concurrent.futures
+from functools import partial
 
 #Image stuff
 import matplotlib.patches as patches
@@ -33,10 +34,8 @@ from skimage import util, draw
 import os
 from multiprocessing.dummy import Pool as ThreadPool
 
-### Global Variables for entire code
-CENTER_GUESS = (500, 500)
-RADIUS_GUESS = 40
-DISK_RADIUS = 3
+# Configuration File
+from gued_globals import *
 
 
 ### Reading Images Functions
@@ -602,39 +601,45 @@ def clean_all(data_array):
     print("Finished cleaning!!")
     return filtered_data
 
-def rmv_xrays_all(data_array):
-    """ Requires global variables for the mean and standard deviation. Filters out any pixels that are more than 4 times the standard deviation of
-    the average pixel value by running the hidden function _remove_xrays in parallel. Use cleanMean if not a large dataset.
+def rmv_xrays_all(data_array, plot=True): #todo update docstring
+    """Filters out any pixels that are more than 4 times the standard deviation of the average pixel value by running
+    the hidden function _remove_xrays in parallel. Use cleanMean if not a large dataset.
 
     Returns: xray removed data sets of the same shape."""
-    print("Removing xrays from all data")
+
+    mean_data = np.mean(data_array, axis=0)
+    std_data = np.std(data_array, axis=0)
+    print("Removing hot pixels from all data")
     clean_data = []
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        results = executor.map(_remove_xrays, data_array)
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = [executor.submit(partial(_remove_xrays, mean_data, std_data), data)for data in data_array]
+        results = [future.result() for future in futures]
+
+    clean_data = []
+    amt_rmv = []
     for result in results:
-        clean_data.append(result)
-    pct_rmv = []
-    for i in range(len(clean_data)):
-        no_rmv = sum(sum(clean_data[i].mask))
-        pct_rmv.append(no_rmv / (1024 * 1024) * 100)
-    clean_data = np.array(clean_data)
-    print(clean_data.shape)
+        data, amt = result
+        clean_data.append(data)
+        amt_rmv.append(amt)
 
-    pct_rmv = np.array(pct_rmv)
-    plt.figure()
-    plt.plot(pct_rmv)
-    plt.title("Percent Pixels Removed")
-    plt.xlabel("Image Number")
-    plt.ylabel("Percent")
-    plt.show()
+    pct_rmv = np.array(amt_rmv)/(len(data_array[1])*len(data_array[2]))*100
+
+    if plot==True:
+        plt.figure()
+        plt.plot(pct_rmv)
+        plt.title("Percent Pixels Removed")
+        plt.xlabel("Image Number")
+        plt.ylabel("Percent")
+        plt.show()
 
     return clean_data
 
 
-def _remove_xrays(data_array_1d):
-    upper_threshold = mean_data + 4 * std_data
+def _remove_xrays(data_array_1d, mean_data, std_data, std_factor=2): #todo update docstring
+    upper_threshold = mean_data + std_factor * std_data
     clean_data = ma.masked_greater_equal(data_array_1d, upper_threshold)
-    return clean_data
+    amt_rmv = np.sum(clean_data.mask)
+    return clean_data, amt_rmv
 
 
 def cleanMean(data_array, std=4, return_clean_data=True):
@@ -747,46 +752,95 @@ def medianFilter(data_array, center_top_left_corner, center_border_length, med_f
     return med_filt_data
 
 
-def backgroundNoise(data_array, bkg_range=20, remove_noise=False):
+def remove_background(data_array, remove_noise=True, plot=False, print_status = True): # todo optimize
     """
-    Takes in a 2d data array (using the mean array is recommended) and calculatees the means of the corners. Linearly interpolates values across 2d
-    array to generate of background noise values using pandas.DataFrame.interpolate. Returns a two dimensional numpy array with the linearly
-    interpolated background noise.
+    Takes in a 2d data array (using the mean array is recommended) and calculates the means of the corners. Linearly
+    interpolates values across 2d array to generate of background noise values using pandas.DataFrame.interpolate.
 
     Arguments:
+        data_array (3d ndarray): single image array
 
-    data_array (2d np.ndarray): Data array used to generate the corner values of the background noise.
-    bkg_range (int): Side length of square in each corner used for generating mean value. Initially set to 20.
-    remove_noise (Bool): If set to true, generated background values are subtracted from the initial input array. Returns cleaned data.
+    Optional Arguments:
+        remove_noise (boolean): Default set to true, returns image with background subtracted. If false, returns
+        interpolated background.
+        plot (boolean): Default set to False. Plots images showing the original image, interpolated background, and
+        background subtracted image.
+        print_status (boolean): Default set to True. Prints a status update every nth image (n defined via CHECK_NUMBER).
+
+    Global Variables:
+        CORNER_RADIUS (int): defines the size of the corners being used in background suptraction.
+        CHECK_NUMBER (int): defines how often updates are given when print_status == True
 
     Returns:
-
-    bkg_data (2d np.ndarray): Data array containing the linearly interpolated background noise for the image. If remove_noise = True,
-                                returned data has background noise removed from original input.
+        clean_data (3d ndarray): Returns array of images with background subtracted if remove_noise == True, else returns
+        array of interpolated background.
     """
     if not isinstance(data_array, np.ndarray):
         raise ValueError("Input data_array must be a numpy array.")
-    if not isinstance(bkg_range, int) and bkg_range > 0:
+    if not isinstance(CORNER_RADIUS, int) and CORNER_RADIUS > 0:
         raise ValueError("bkg_range must be an integer > 0.")
     if not isinstance(remove_noise, bool):
         raise ValueError("remove_noise must be a boolean.")
-    if not (2 * bkg_range < len(data_array[0, :]) and
-            2 * bkg_range < len(data_array[:, 0])):
+    if not (2 * CORNER_RADIUS < len(data_array[:, 0, :]) and
+            2 * CORNER_RADIUS < len(data_array[:, :, 0])):
         raise ValueError("2 * bkg-range must be less than both the number of rows and the number of columns.")
 
-    empty_array = np.empty(np.shape(data_array))
-    empty_array = (ma.masked_array(empty_array, mask=True))
-    empty_array[0, 0] = np.mean(data_array[0:20, 0:20])
-    empty_array[-1, 0] = np.mean(data_array[-20:, 0:20])
-    empty_array[0, -1] = np.mean(data_array[0:20, -20:])
-    empty_array[-1, -1] = np.mean(data_array[-20:, -20:])
-    empty_array = pd.DataFrame(empty_array).interpolate(axis=0)
-    empty_array = pd.DataFrame(empty_array).interpolate(axis=1)
-    bkg_data = pd.DataFrame.to_numpy(empty_array)
+    clean_data = []
+    bkg_data = []
+    for i, image in enumerate(data_array):
+        empty_array = np.empty(np.shape(image))
+        empty_array = (ma.masked_array(empty_array, mask=True))
+        empty_array[0, 0] = np.mean(image[0:CORNER_RADIUS, 0:CORNER_RADIUS])
+        empty_array[-1, 0] = np.mean(image[-CORNER_RADIUS:, 0:CORNER_RADIUS])
+        empty_array[0, -1] = np.mean(image[0:CORNER_RADIUS, -CORNER_RADIUS:])
+        empty_array[-1, -1] = np.mean(image[-CORNER_RADIUS:, -CORNER_RADIUS:])
+        empty_array = pd.DataFrame(empty_array).interpolate(axis=0)
+        empty_array = pd.DataFrame(empty_array).interpolate(axis=1)
+        bkg = pd.DataFrame.to_numpy(empty_array)
+        bkg_data.append(bkg)
+        clean_data.append(image - bkg)
+        if print_status == True:
+            if i%CHECK_NUMBER == 0:
+                print(f"Subtracting background of {i}th image.")
+
+    if plot == True:
+        plt.figure()
+
+        plt.subplot(1, 3, 1)
+        plt.imshow(data_array[0])
+        plt.colorbar()
+        plt.title("Original Data")
+
+        plt.subplot(1, 3, 2)
+        plt.imshow(bkg_data[0])
+        plt.colorbar()
+        plt.title("Interpolated Background")
+
+        plt.subplot(1, 3, 3)
+        plt.imshow(clean_data[0])
+        plt.colorbar()
+        plt.title("Background Free Data")
+        plt.show()
+
+
     if remove_noise == True:
-        return data_array - bkg_data
+        return clean_data
     else:
         return bkg_data
+
+def remove_background_parallel(data_array): #todo add doc string
+    """Slower when 185 images..."""
+
+    clean_data = []
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        results = executor.map(remove_background, data_array)
+
+    for result in results:
+        clean_data.append(result)
+
+    clean_data = np.array(clean_data)
+
+    return clean_data
 
 
 def gaussian_filter_2d(data_array, sig=1):
@@ -1216,7 +1270,7 @@ def find_center_parallel(data_array, plot=True, print_stats=True):
         print(r'Averaged ctr is ' + str(center_ave))
         fail_count = np.count_nonzero(np.array(center_x) == CENTER_GUESS[0])
 
-        print(f"Percentage of images where the center finding failed (i.e., found the guess value): {fail_count / len(good_data) * 100}")
+        print(f"Percentage of images where the center finding failed (i.e., found the guess value): {fail_count / len(data_array) * 100}")
     return center_x, center_y
 
 

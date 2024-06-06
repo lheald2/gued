@@ -34,17 +34,33 @@ print('Image number read: ', len(counts))
 print('Stage positions: ', len(uni_stage))
 print(len(np.unique(file_order)))
 
-# Remove Hot Pixels
+# Remove Outlier Images Based on Total Counts
 data_array, stage_positions, file_order, counts = gued.remove_counts(data_array, stage_positions, file_order, counts)
 
 #Find Centers
 
 start = time.perf_counter()
-center_x, center_y = gued.find_center_parallel(data_array)
+center_x, center_y = gued.find_center_parallel(data_array, plot=False)
 stop = time.perf_counter()
+
+print(f"Found centers for {len(data_array): .2f} images in {(stop-start): .2f} seconds using thread pool")
+
+
+# Remove Background based on Corners
+
+start = time.perf_counter()
+#data_array = gued.remove_background(data_array, plot=False)
+stop = time.perf_counter()
+
+print(f"Removed background from {len(data_array): .2f} images in {(stop - start): .2f} seconds.")
+
+
+# Removing Hot Pixels
+
+start = time.perf_counter()
+data_array = gued.rmv_xrays_all(data_array, plot=False)
+stop = time.perf_counter()
+
+print(f"Removed hot pixels from {len(data_array): .2f} images in {(stop - start): .2f} seconds.")
+
 #
-print(f"Found centers for {len(data_array)} images in {(stop-start)} seconds while running in parallel")
-#
-
-
-
