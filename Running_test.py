@@ -6,6 +6,7 @@ import numpy as np
 import center_finding as cf
 import matplotlib.pyplot as plt
 
+
 # Load in Data
 dataPath = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823'
 runPath = "\\*\\*\\ANDOR1_*.tif"
@@ -63,4 +64,22 @@ stop = time.perf_counter()
 
 print(f"Removed hot pixels from {len(data_array): .2f} images in {(stop - start): .2f} seconds.")
 
-#
+# Mask Beam Block and Artifacts
+
+start = time.perf_counter()
+
+# Find Mask
+mean_data = np.nanmean(data_array, axis=0)
+mask_center = [475,475]
+mask_radius = 45
+
+# Apply Mask
+data_array = gued.apply_mask(data_array, mask_center, mask_radius, add_mask=[[440, 435, 30]], plot=False)
+
+stop = time.perf_counter()
+print(f"Masked data in {stop-start} seconds")
+ave_cx = np.nanmean(center_x)
+ave_cy = np.nanmean(center_y)
+center = [ave_cx, ave_cy]
+test = data_array[1]
+clean_image, idx_outliers = gued.remove_radial_outliers(test, center, plot=True)
