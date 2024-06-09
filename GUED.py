@@ -23,7 +23,44 @@ from gued_globals import *
 
 ### Reading Images Functions
 
-def _get_counts(data_array, plot=False):  # todo clean and update
+def _show_counts(stage_pos, counts):
+    """Function for visualizing and plotting total counts from a set of data. Called within the get_image_details
+    function when plot == True"""
+
+    counts_mean = np.mean(counts)  # Mean values of Total Counts of all images
+    counts_std = np.std(counts)  # the STD of all the tc for all the iamges
+    uni_stage = np.unique(stage_pos)  # Pump-probe stage position
+    plt.figure()  # Plot counts rate, images number at each posi, and bad images
+
+    plt.subplot(1, 3, 1)
+    plt.plot(counts, '-d')
+    plt.axhline(y=counts_mean, color='k', linestyle='-', linewidth=1, label="mean counts");
+    plt.axhline(y=counts_mean - (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="min counts");
+    plt.axhline(y=counts_mean + (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="max counts");
+    plt.xlabel('Images orderd in lab time');
+    plt.ylabel('Counts');
+    plt.legend()
+    plt.title('Total counts');
+
+    plt.subplot(1, 3, 2)  # Histogram the number of images at each posi
+    plt.plot(uni_stage, '-o');
+    plt.xlabel('pp stage posi');
+    plt.ylabel('Stg Position [mm]');
+    plt.title('Delay Stage Position');
+
+    plt.subplot(1, 3, 3)  # Histogram the number of images at each posi
+    posi_edges_bins = np.append(uni_stage - 0.001, uni_stage[-1])
+    posi_hist, posi_edges = np.histogram(stage_pos, bins=posi_edges_bins)
+    plt.plot(uni_stage, posi_hist, '-*')
+    plt.xlabel('pp stage posi [mm]');
+    plt.ylabel('Num of Imges');
+    plt.title('Num of images at each delay');
+
+    plt.tight_layout()
+    plt.show()
+
+
+def _get_counts(data_array, plot=False):
     """
     Generates the counts from the given data by summing over the array elements. Returns 2d array of the same dimension as the
     input images.
@@ -151,43 +188,6 @@ def get_image_details(file_names, sort=True, plot=False,
         _show_counts(stage_pos, counts)
 
     return data_array, stage_pos, file_order, counts
-
-
-def _show_counts(stage_pos, counts):
-    """Function for visualizing and plotting total counts from a set of data. Called within the get_image_details
-    function when plot == True"""
-
-    counts_mean = np.mean(counts)  # Mean values of Total Counts of all images
-    counts_std = np.std(counts)  # the STD of all the tc for all the iamges
-    uni_stage = np.unique(stage_pos)  # Pump-probe stage position
-    plt.figure(figsize=(12, 4))  # Plot counts rate, images number at each posi, and bad images
-
-    plt.subplot(1, 3, 1)
-    plt.plot(counts, '-d')
-    plt.axhline(y=counts_mean, color='k', linestyle='-', linewidth=1, label="mean counts");
-    plt.axhline(y=counts_mean - (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="min counts");
-    plt.axhline(y=counts_mean + (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="max counts");
-    plt.xlabel('Images orderd in lab time');
-    plt.ylabel('Counts');
-    plt.legend()
-    plt.title('Total counts');
-
-    plt.subplot(1, 3, 2)  # Histogram the number of images at each posi
-    plt.plot(uni_stage, '-o');
-    plt.xlabel('pp stage posi');
-    plt.ylabel('Stg Position [mm]');
-    plt.title('Delay Stage Position');
-
-    plt.subplot(1, 3, 3)  # Histogram the number of images at each posi
-    posi_edges_bins = np.append(uni_stage - 0.001, uni_stage[-1])
-    posi_hist, posi_edges = np.histogram(stage_pos, bins=posi_edges_bins)
-    plt.plot(uni_stage, posi_hist, '-*')
-    plt.xlabel('pp stage posi [mm]');
-    plt.ylabel('Num of Imges');
-    plt.title('Num of images at each delay');
-
-    plt.tight_layout()
-    plt.show()
 
 
 def get_image_details_slac(file_names, sort=True):  # todo update to look like others
@@ -380,6 +380,8 @@ def _sort_files(file_order, stage_positions):
     return idx_list
 
 
+### Cleaning Functions 
+
 def remove_counts(data_array, stage_positions, file_order, counts, std_factor=3, plot=False):
     # todo add edge option
     """Filters input parameters by removing any data where the total counts falls outside of the set filter. Default
@@ -430,125 +432,6 @@ def remove_counts(data_array, stage_positions, file_order, counts, std_factor=3,
         plt.show()
 
     return new_array, new_stage_positions, new_file_order, new_counts
-
-
-### Cleaning Functions
-
-def remove_xrays_pool(data_array, plot=True, std_factor=3):
-    # todo test
-    """Filters out any pixels that are more than set threshold value based on the standard deviation of the
-    average pixel value by running the hidden function _remove_xrays in parallel. If operating on a smaller data set
-    use the cleanmean function.
-
-    Arguments:
-        data_array (3d array): array of image like data with length N where N is number of images.
-
-    Optional Arguments:
-        plot (boolean): Default set to True. Plots the percentage of pixeled removed during cleaning process
-        std_factor (int): Default set to 3. Defines the threshold for removing pixels with
-        |pixel_value - mean| > std_factor*std
-
-    Returns:
-        clean_data (3d array): array of image like data with shape of input data array where errant pixels are now
-        masked based on the set threshold"""
-
-    mean_data = np.mean(data_array, axis=0)
-    std_data = np.std(data_array, axis=0)
-    print("Removing hot pixels from all data")
-    with concurrent.futures.ProcessPoolExecutor() as executor:
-        futures = [executor.submit(partial(_remove_xrays, data), (mean_data, std_data, std_factor)) for
-                   data in data_array]
-        results = [future.result() for future in futures]
-
-    clean_data = []
-    amt_rmv = []
-    for result in results:
-        data, amt = result
-        clean_data.append(data)
-        amt_rmv.append(amt)
-
-    pct_rmv = np.array(amt_rmv) / (len(data_array[1]) * len(data_array[2])) * 100
-
-    if plot == True:
-        plt.figure()
-        plt.plot(pct_rmv)
-        plt.title("Percent Pixels Removed")
-        plt.xlabel("Image Number")
-        plt.ylabel("Percent")
-        plt.show()
-
-    return clean_data
-
-
-def _remove_xrays(data_array_1d, mean_data, std_data, std_factor=3):
-    """This is the hidden function that is run within the rmv_xrays_all function.
-
-    Arguments:
-        data_array (2d array): array of image like data with length N where N is number of images.
-        mean_data (2d array): average image of all data in data_array from parent function.
-        std_data (2d array): image with standard deviation values from all data in data_array in parent function.
-
-    Optional Arguments:
-        std_factor (int): Default set to 3. Defines the threshold for removing pixels with
-        |pixel_value - mean| > std_factor*std
-
-    Returns:
-        clean_data (2d array): array of image like data with shape of input data array where errant pixels are now
-        masked based on the set threshold
-        amt_rmv (int): count of all pixels removed per image"""
-
-    upper_threshold = mean_data + std_factor * std_data
-    clean_data = ma.masked_greater_equal(data_array_1d, upper_threshold)
-    amt_rmv = np.sum(clean_data.mask)
-    return clean_data, amt_rmv
-
-
-def median_filter(data_array, center_top_left_corner, center_border_length,
-                  med_filter_range=3):  # todo test and optimize
-    """
-    Takes in a data array and applies scipy.signal's median filter. Then replaces the boundary and center values with the
-    original values from the input array as to not lose precision in these parts.
-
-    Arguments:
-
-    data_array (np.array): 2d Numpy array containing diffraction image data.
-    center_top_left_corner (tuple): Tuple containing the row index (integer) and column index (integer) of the top left corner
-                                    (lowest_index_row, lowest_index_column)
-    center_border_length (int): Length of one side of the square. Must be an integer.
-    med_filter_range (int): Must be odd. Initially set to 3. Shape of the square array for median filtering. Using an odd values makes it so that
-    the median filter is centered around the individual point.
-
-    Returns:
-
-    med_filt_data (2d-array): Array containing the median filtered data.
-
-    """
-    if not isinstance(data_array, np.ndarray):
-        raise ValueError("Input data_array must be a 2D numpy array.")
-    if not isinstance(center_top_left_corner, tuple) or len(center_top_left_corner) != 2:
-        raise ValueError("Center top left corner must be a tuple of length 2 that contains two integers.")
-    if not isinstance(center_border_length, int):
-        raise ValueError("center_border_length must be an integer.")
-    # if not isinstance(center_top_left_corner[0] + center_border_length < data_array[0,-1]
-    if not (0 <= center_top_left_corner[0] < data_array.shape[0] and
-            0 <= center_top_left_corner[1] < data_array.shape[1] and
-            center_top_left_corner[0] + center_border_length <= data_array.shape[0] and
-            center_top_left_corner[1] + center_border_length <= data_array.shape[1]):
-        raise ValueError("""center_top_left_corner is out of bounds or adding center_border_length goes beyond the array.
-                     Check that the tuple values are positive integers within the bounds of the data array and that 
-                     adding the border length does not result in a value beyond the size of the array.""")
-    if not isinstance(med_filter_range, int) and med_filter_range % 2 == 1:
-        raise ValueError("med_filter_range must be an odd integer.")
-
-    med_filt_data = ss.medfilt2d(data_array, med_filter_range)
-    med_filt_data[0:med_filter_range // 2, :] = data_array[0:med_filter_range // 2, :]
-    med_filt_data[-(med_filter_range // 2):0, :] = data_array[-(med_filter_range // 2):0, :]
-    med_filt_data[:, 0:med_filter_range // 2] = data_array[:, 0:med_filter_range // 2]
-    med_filt_data[:, -(med_filter_range // 2):] = data_array[:, -(med_filter_range // 2):]
-    row_s, col_s = center_top_left_corner
-    row_e, col_e = row_s + center_border_length, col_s + center_border_length
-    med_filt_data[row_s:row_e, col_s:col_e] = data_array[row_s:row_e, col_s:col_e]
-    return med_filt_data
 
 
 def remove_background(data_array, remove_noise=True, plot=False, print_status=True):  # todo parallelize
@@ -654,12 +537,11 @@ def _remove_background(image):
         raise ValueError("Input data_array must be a numpy array.")
     if not isinstance(CORNER_RADIUS, int) and CORNER_RADIUS > 0:
         raise ValueError("bkg_range must be an integer > 0.")
-    if not isinstance(remove_noise, bool):
-        raise ValueError("remove_noise must be a boolean.")
     if not (2 * CORNER_RADIUS < len(image[0, :]) and
             2 * CORNER_RADIUS < len(image[:, 0])):
         raise ValueError("2 * bkg-range must be less than both the number of rows and the number of columns.")
-
+    
+    import numpy.ma as ma
     clean_data = []
     bkg_data = []
 
@@ -715,6 +597,75 @@ def remove_background_pool(data_array, remove_noise=True, plot=False):
         return clean_data
     else:
         return backgrounds
+
+
+def remove_xrays_pool(data_array, plot=True, std_factor=3):
+    # todo test
+    """Filters out any pixels that are more than set threshold value based on the standard deviation of the
+    average pixel value by running the hidden function _remove_xrays in parallel. If operating on a smaller data set
+    use the cleanmean function.
+
+    Arguments:
+        data_array (3d array): array of image like data with length N where N is number of images.
+
+    Optional Arguments:
+        plot (boolean): Default set to True. Plots the percentage of pixeled removed during cleaning process
+        std_factor (int): Default set to 3. Defines the threshold for removing pixels with
+        |pixel_value - mean| > std_factor*std
+
+    Returns:
+        clean_data (3d array): array of image like data with shape of input data array where errant pixels are now
+        masked based on the set threshold"""
+
+    mean_data = np.mean(data_array, axis=0)
+    std_data = np.std(data_array, axis=0)
+    print("Removing hot pixels from all data")
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        futures = [executor.submit(partial(_remove_xrays, data), (mean_data, std_data, std_factor)) for
+                   data in data_array]
+        results = [future.result() for future in futures]
+
+    clean_data = []
+    amt_rmv = []
+    for result in results:
+        data, amt = result
+        clean_data.append(data)
+        amt_rmv.append(amt)
+
+    pct_rmv = np.array(amt_rmv) / (len(data_array[1]) * len(data_array[2])) * 100
+
+    if plot == True:
+        plt.figure()
+        plt.plot(pct_rmv)
+        plt.title("Percent Pixels Removed")
+        plt.xlabel("Image Number")
+        plt.ylabel("Percent")
+        plt.show()
+
+    return clean_data
+
+
+def _remove_xrays(data_array_1d, mean_data, std_data, std_factor=3):
+    """This is the hidden function that is run within the rmv_xrays_all function.
+
+    Arguments:
+        data_array (2d array): array of image like data with length N where N is number of images.
+        mean_data (2d array): average image of all data in data_array from parent function.
+        std_data (2d array): image with standard deviation values from all data in data_array in parent function.
+
+    Optional Arguments:
+        std_factor (int): Default set to 3. Defines the threshold for removing pixels with
+        |pixel_value - mean| > std_factor*std
+
+    Returns:
+        clean_data (2d array): array of image like data with shape of input data array where errant pixels are now
+        masked based on the set threshold
+        amt_rmv (int): count of all pixels removed per image"""
+
+    upper_threshold = mean_data + std_factor * std_data
+    clean_data = ma.masked_greater_equal(data_array_1d, upper_threshold)
+    amt_rmv = np.sum(clean_data.mask)
+    return clean_data, amt_rmv
 
 
 def subtract_background(data_array, mean_background, plot=True):

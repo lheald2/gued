@@ -50,7 +50,7 @@ print(f"Found centers for {len(data_array): .2f} images in {(stop-start): .2f} s
 # Remove Background based on Corners
 
 start = time.perf_counter()
-#data_array = gued.remove_background(data_array, plot=False)
+data_array = gued.remove_background(data_array, plot=False)
 stop = time.perf_counter()
 
 print(f"Removed background from {len(data_array): .2f} images in {(stop - start): .2f} seconds.")
