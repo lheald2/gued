@@ -623,6 +623,7 @@ def _remove_background(image):
 
     return np.squeeze(np.array(clean_data)), np.squeeze(np.array(bkg_data))
 
+
 def remove_background_pool(data_array, remove_noise=True, plot=False):
     """ 
     Removes the background of images based on the corners. Runs the hidden function _remove_background and runs it in parallel.
@@ -1249,7 +1250,7 @@ def remove_radial_outliers(image, center, fill_value='nan', std_factor=5, plot=F
     ave_image, std_image = _preprocess_radial_data(image, center)
     bad_idx = np.logical_or(image >= ave_image + std_factor * std_image, image <= ave_image - std_factor * std_image)
     pct_removed = np.sum(bad_idx) / (len(image) * len(image)) * 100
-    print(f"{pct_removed}% of pixels were removed.")
+    #print(f"{pct_removed}% of pixels were removed.")
 
     if fill_value == 'nan':
         clean_image[bad_idx] = np.nan
@@ -1259,27 +1260,27 @@ def remove_radial_outliers(image, center, fill_value='nan', std_factor=5, plot=F
     if plot == True:
         plt.figure()
         plt.subplot(1, 3, 1)
-        plt.imshow(np.log(image))
-        # plt.xlim(300, 600)
-        # plt.ylim(300, 600)
+        plt.imshow(image)
+        plt.xlim(300, 600)
+        plt.ylim(300, 600)
         plt.title("Original Image")
 
         plt.subplot(1, 3, 2)
-        plt.imshow(np.log(ave_image))
-        # plt.xlim(300, 600)
-        # plt.ylim(300, 600)
+        plt.imshow(ave_image)
+        plt.xlim(300, 600)
+        plt.ylim(300, 600)
         plt.title("Average Image")
 
         plt.subplot(1, 3, 3)
-        plt.imshow(np.log(clean_image))
-        # plt.xlim(300, 600)
-        # plt.ylim(300, 600)
+        plt.imshow(clean_image)
+        plt.xlim(300, 600)
+        plt.ylim(300, 600)
         plt.title("Cleaned Image")
 
         plt.tight_layout()
         plt.show()
 
-    return clean_image, bad_idx, ave_image
+    return clean_image, bad_idx, pct_removed, ave_image
 
 
 def remove_radial_outliers_pool(data_array, center, plot=False):
@@ -1310,6 +1311,7 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
     clean_data = []
     bad_idx = []
     average_data = []
+    pct_removed = []
 
     if len(center) > 2:
         print("Using all center values ")
@@ -1317,12 +1319,11 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
         with concurrent.futures.ProcessPoolExecutor() as executor:
             # Zip the arrays together and submit to the executor
             results = list(executor.map(lambda args: remove_radial_outliers(*args), zip(data_array, center)))
-            clean_data.append(results[0])
-            bad_idx.append(results[1])
         for result in results:
-            data, idx, ave = result
+            data, idx, pct, ave = result
             clean_data.append(data)
             bad_idx.append(idx)
+            pct_removed.append(pct)
             average_data.append(ave)
 
     elif len(center) == 2:
@@ -1333,13 +1334,13 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
             results = [future.result() for future in futures]
 
         for result in results:
-            data, idx, ave = result
+            data, idx, pct, ave = result
             clean_data.append(data)
             bad_idx.append(idx)
+            pct_removed.append(pct)
             average_data.append(ave)
-    bad_counts = np.sum(bad_idx, axis=0)
 
-    print(bad_counts.shape)
+
 
     if plot == True:
         plt.figure()
@@ -1363,7 +1364,8 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
 
         plt.tight_layout()
         plt.show()
-
+    
+    print(f"{pct_removed[0]}% removed")
 
     return clean_data
 
@@ -1443,7 +1445,27 @@ def get_azimuthal_average_pool(data_array, center, plot=False):
         plt.title("Example of Azimuthal Average")
         plt.show()
 
+    if normalize == True:
+        norm_data = []
+        for ave in average_data:
+            norm = normalize_to_baseline(ave)
+            norm_data.append(norm)
+        average_data = np.array(norm_data)
+
+
     return average_data, std_data
 
+def normalize_to_baseline(data, min_val=200, max_val=300):  # todo add docstring and optimize
+    data[:, :25] = np.nan
+    data_mean = np.nanmean(data, axis=0)
+    norm_factor = np.nansum(data_mean[min_val:max_val])
+    data_norm = []
+    for i in range(len(data)):
+        offset = np.nansum(data[i, min_val:max_val])
+        norm = data[i] * (norm_factor / offset)
+        data_norm.append(norm)
+
+    data_norm = np.array(data_norm)
+    return data_norm
 ### PDF Generating Functions
 # todo add theses functions
