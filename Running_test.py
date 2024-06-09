@@ -3,7 +3,7 @@ import time
 
 import GUED as gued
 import numpy as np
-import center_finding as cf
+
 import matplotlib.pyplot as plt
 
 
@@ -41,7 +41,7 @@ data_array, stage_positions, file_order, counts = gued.remove_counts(data_array,
 #Find Centers
 
 start = time.perf_counter()
-center_x, center_y = gued.find_center_parallel(data_array, plot=False)
+center_x, center_y = gued.find_center_pool(data_array, plot=False)
 stop = time.perf_counter()
 
 print(f"Found centers for {len(data_array): .2f} images in {(stop-start): .2f} seconds using thread pool")
@@ -59,7 +59,7 @@ print(f"Removed background from {len(data_array): .2f} images in {(stop - start)
 # Removing Hot Pixels
 
 start = time.perf_counter()
-data_array = gued.rmv_xrays_all(data_array, plot=False)
+data_array = gued.remove_xrays_pool(data_array, plot=False)
 stop = time.perf_counter()
 
 print(f"Removed hot pixels from {len(data_array): .2f} images in {(stop - start): .2f} seconds.")
@@ -78,8 +78,23 @@ data_array = gued.apply_mask(data_array, mask_center, mask_radius, add_mask=[[44
 
 stop = time.perf_counter()
 print(f"Masked data in {stop-start} seconds")
+
+
+
+# Remove Radial Outliers and Apply Median Filter
 ave_cx = np.nanmean(center_x)
 ave_cy = np.nanmean(center_y)
 center = [ave_cx, ave_cy]
-test = data_array[1]
-clean_image, idx_outliers = gued.remove_radial_outliers(test, center, plot=True)
+center = [500, 500]
+
+start = time.perf_counter()
+# for i in range(0,10):
+#     temp = gued.remove_radial_outliers(data_array[i], center)
+#     print(i, " : completed")
+
+test = gued.remove_radial_outliers(data_array[0], center, plot=True, fill_value='ave')
+
+
+stop = time.perf_counter()
+
+print(f"Radial outliers for {len(data_array)} images took {(stop-start):2f} seconds.")

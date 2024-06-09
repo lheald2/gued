@@ -1,37 +1,21 @@
 # todo Clean importing calls
 # Standard Packages
 import numpy as np
-from math import exp, sqrt, floor
 from tifffile import tifffile as tf
-import glob
 import matplotlib.pyplot as plt
 import pandas as pd
-import time
-from datetime import date
-import numpy.ma as ma
 import scipy.signal as ss
-import scipy.interpolate as interp
-from scipy.optimize import curve_fit
-
-from scipy.ndimage import median_filter
-from scipy.ndimage import gaussian_filter
-from scipy.interpolate import make_interp_spline
 
 import concurrent.futures
 from functools import partial
 
 # Image stuff
 import matplotlib.patches as patches
-from PIL import Image
 from skimage.filters import threshold_otsu
 from skimage.morphology import closing, square, disk
 from skimage.segmentation import clear_border
 from skimage.measure import label, regionprops_table
 from skimage import util, draw
-
-# Multiprocessing
-import os
-from multiprocessing.dummy import Pool as ThreadPool
 
 # Configuration File
 from gued_globals import *
@@ -39,9 +23,7 @@ from gued_globals import *
 
 ### Reading Images Functions
 
-# todo learn about classes and figure out how to implement
-
-def get_counts(data_array, plot=False):  # todo clean and update
+def _get_counts(data_array, plot=False):  # todo clean and update
     """
     Generates the counts from the given data by summing over the array elements. Returns 2d array of the same dimension as the
     input images.
@@ -121,7 +103,7 @@ def get_image_details(file_names, sort=True, plot=False,
 
     stage_pos = np.array(stage_pos)
     file_order = np.array(file_order)
-    counts = get_counts(data_array)
+    counts = _get_counts(data_array)
 
     if sort == True:
         idx_sort = np.argsort(file_order)
@@ -248,7 +230,7 @@ def get_image_details_slac(file_names, sort=True):  # todo update to look like o
 
     stage_pos = np.array(stage_pos)
     file_order = np.array(file_order)
-    counts = get_counts(data_array)
+    counts = _get_counts(data_array)
 
     if sort == True:
         idx_sort = np.argsort(file_order)
@@ -305,7 +287,7 @@ def get_image_details_keV(file_names, sort=False, multistage=False):
         uv_stage_pos = np.array(uv_stage_pos)
         file_order = np.array(file_order)
         current = np.array(current)
-        counts = get_counts(data_array)
+        counts = _get_counts(data_array)
 
         if sort == True:
             temp_idx = _sort_files_multistage(file_order, ir_stage_pos, uv_stage_pos)
@@ -340,7 +322,7 @@ def get_image_details_keV(file_names, sort=False, multistage=False):
         stage_positions = np.array(stage_positions)
         file_order = np.array(file_order)
         current = np.array(current)
-        counts = get_counts(data_array)
+        counts = _get_counts(data_array)
 
         if sort == True:
             temp_idx = _sort_files(file_order, stage_positions)
@@ -399,6 +381,7 @@ def _sort_files(file_order, stage_positions):
 
 
 def remove_counts(data_array, stage_positions, file_order, counts, std_factor=3, plot=False):
+    # todo add edge option
     """Filters input parameters by removing any data where the total counts falls outside of the set filter. Default
         value is set to 3 standard deviations from the mean. Returns the same variables as it inputs but with
         different dimensions.
@@ -451,7 +434,8 @@ def remove_counts(data_array, stage_positions, file_order, counts, std_factor=3,
 
 ### Cleaning Functions
 
-def rmv_xrays_all(data_array, plot=True, std_factor=3):
+def remove_xrays_pool(data_array, plot=True, std_factor=3):
+    # todo test
     """Filters out any pixels that are more than set threshold value based on the standard deviation of the
     average pixel value by running the hidden function _remove_xrays in parallel. If operating on a smaller data set
     use the cleanmean function.
@@ -471,9 +455,8 @@ def rmv_xrays_all(data_array, plot=True, std_factor=3):
     mean_data = np.mean(data_array, axis=0)
     std_data = np.std(data_array, axis=0)
     print("Removing hot pixels from all data")
-    clean_data = []
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = [executor.submit(partial(_remove_xrays, mean_data, std_data, std_factor), data) for
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        futures = [executor.submit(partial(_remove_xrays, data), (mean_data, std_data, std_factor)) for
                    data in data_array]
         results = [future.result() for future in futures]
 
@@ -520,71 +503,8 @@ def _remove_xrays(data_array_1d, mean_data, std_data, std_factor=3):
     return clean_data, amt_rmv
 
 
-def cleanMean(data_array, std_factor=4, return_clean_data=True):
-    """
-    Takes in a data array and calculate the mean and standard deviation at each index across all images. Then applies a filter
-    to the data that masks all values (replaces outliers with nan's) outside a given number of standard deviations. After, the
-    mean is taken, returning a 2 dimensional array with the mean data of non-outlier entries across all images.
-
-    If return_clean_data is set to True, the cleaned data is returned as a 3d array without having the mean taken.
-
-    Arguments:
-
-    data_array (numpy.ndarray): Data array containing diffraction image data.
-    std (int or float): Number of standard deviations from the mean allowed. Values outside this number of standard deviations
-                        are masked as nan's. Set to 3 by default.
-
-    Returns:
-
-    clean_mean_data (numpy.ndarray): Default. Returns a 2 dimensional array containing the mean values of the cleaned data.
-    clean_data (numpy.ndarray): Other option. Returns the raw 3 dimensional array containing the cleaned data.
-
-    Examples:
-
-    example_array = np.array([[[8.,2],[1,2]], [[1.,2],[1,2]], [[1.,2],[1,2]], [[1., 2], [1,2]]])
-
-    >>> cleanMean(example_array, std_factor=1)
-        np.array([[1.,2],[1.,2]])
-
-    >>> cleanMean(example_array, std_factor=1, return_clean_data = True)
-        np.array([[[np.nan, 2],[1,2]], [[1.,2],[1,2]], [[1.,2],[1,2]], [[1.,2],[1,2]]])
-    """
-    if len(data_array) == 0:
-        raise ValueError("Input data array is empty.")
-    if data_array.ndim != 3:
-        raise ValueError("Input data array is not 3 dimensional.")
-    if std_factor <= 0:
-        raise ValueError("Number of standard deviations (std) must be non-negative.")
-    if not isinstance(return_clean_data, bool):
-        raise TypeError("return_clean_data must be a boolean value.")
-
-    mean = np.mean(data_array, axis=0)
-    stDev = np.std(data_array, axis=0)
-    upper_threshold = mean + std_factor * stDev
-    # lower_threshold = mean - std*stDev
-    clean_data = ma.masked_greater_equal(data_array, upper_threshold)
-    # clean_data = ma.masked_outside(data_array, lower_threshold, upper_threshold)
-    pct_rmv = []
-    for i in range(len(clean_data)):
-        no_rmv = sum(sum(clean_data[i].mask))
-        pct_rmv.append(no_rmv / (1024 * 1024) * 100)
-
-    pct_rmv = np.array(pct_rmv)
-    plt.figure()
-    plt.plot(pct_rmv)
-    plt.title("Percent Pixels Removed")
-    plt.xlabel("Image Number")
-    plt.ylabel("Percent")
-    plt.show()
-    if return_clean_data == True:
-        return clean_data
-    else:
-        clean_mean_data = np.mean(clean_data, axis=(0))
-        return clean_mean_data
-
-
-def medianFilter(data_array, center_top_left_corner, center_border_length,
-                 med_filter_range=3):  # todo test and optimize
+def median_filter(data_array, center_top_left_corner, center_border_length,
+                  med_filter_range=3):  # todo test and optimize
     """
     Takes in a data array and applies scipy.signal's median filter. Then replaces the boundary and center values with the
     original values from the input array as to not lose precision in these parts.
@@ -631,7 +551,7 @@ def medianFilter(data_array, center_top_left_corner, center_border_length,
     return med_filt_data
 
 
-def remove_background(data_array, remove_noise=True, plot=False, print_status=True):
+def remove_background(data_array, remove_noise=True, plot=False, print_status=True):  # todo parallelize
     """
     Takes in a 2d data array (using the mean array is recommended) and calculates the means of the corners. Linearly
     interpolates values across 2d array to generate of background noise values using pandas.DataFrame.interpolate.
@@ -654,6 +574,7 @@ def remove_background(data_array, remove_noise=True, plot=False, print_status=Tr
         clean_data (3d ndarray): Returns array of images with background subtracted if remove_noise == True, else returns
         array of interpolated background.
     """
+    import numpy.ma as ma
     if not isinstance(data_array, np.ndarray):
         raise ValueError("Input data_array must be a numpy array.")
     if not isinstance(CORNER_RADIUS, int) and CORNER_RADIUS > 0:
@@ -707,50 +628,127 @@ def remove_background(data_array, remove_noise=True, plot=False, print_status=Tr
         return bkg_data
 
 
-# Masking and Center Finding Functions
-
-def detectorMask(data_array, hole_center, inner_radius, outer_radius,
-                 plot_image=True):  # todo figure out which masking to use
+def _remove_background(image):
     """
-    Takes in a 2d data array and applies a circular (donut shaped) detector mask to it, replacing the masked values with np.nan's.
-    Returns the masked, 2d data array.
+    Takes in a 2d data array (using the mean array is recommended) and calculates the means of the corners. Linearly
+    interpolates values across 2d array to generate of background noise values using pandas.DataFrame.interpolate.
 
     Arguments:
+        image (2d ndarray): single image array
 
-    data_array (2d np.ndarray): 2d data array to be masked.
-    hole_center (tuple): Tuple containing the x and y coordinates of the center of the image, each one of which an int.
-    inner_radius (float): Inner radius. Values within the radius of this drawn from the center are masked.
-    outer_radius (float): Outer radius of the donut. Values outside the radius of this drawn from the center are masked.
-    plot_image (bool, optional): If True, plots the masked image. Default is False.
+    Optional Arguments:
+        remove_noise (boolean): Default set to true, returns image with background subtracted. If false, returns
+        interpolated background.
+        plot (boolean): Default set to False. Plots images showing the original image, interpolated background, and
+        background subtracted image.
+
+    Global Variables:
+        CORNER_RADIUS (int): defines the size of the corners being used in background suptraction.
+        CHECK_NUMBER (int): defines how often updates are given when print_status == True
 
     Returns:
-    ring_data (2d np.ndarray): Data array with the circular detector mask applied.
+        clean_image (2d ndarray): Returns image with background subtracted if remove_noise == True, else returns
+        array of interpolated background.
     """
-    if not isinstance(hole_center, tuple) or len(hole_center) != 2:
-        raise ValueError(
-            "hole_center must be a tuple of length 2 containing the x and y coordinates of the hole center.")
-    if not (isinstance(inner_radius, (int, float)) and inner_radius > 0):
-        raise ValueError("inner_radius must be a positive float or integer.")
-    if not (isinstance(outer_radius, (int, float)) and outer_radius > 0):
-        raise ValueError("outer_radius must be a positive float or integer.")
-    if inner_radius >= outer_radius:
-        raise ValueError("inner_radius must be smaller than outer_radius.")
+    if not isinstance(image, np.ndarray):
+        raise ValueError("Input data_array must be a numpy array.")
+    if not isinstance(CORNER_RADIUS, int) and CORNER_RADIUS > 0:
+        raise ValueError("bkg_range must be an integer > 0.")
+    if not isinstance(remove_noise, bool):
+        raise ValueError("remove_noise must be a boolean.")
+    if not (2 * CORNER_RADIUS < len(image[0, :]) and
+            2 * CORNER_RADIUS < len(image[:, 0])):
+        raise ValueError("2 * bkg-range must be less than both the number of rows and the number of columns.")
 
-    hole_cx, hole_cy = hole_center
-    x_idx, y_idx = np.meshgrid(np.arange(data_array.shape[2]), np.arange(data_array.shape[1]))
-    dist = np.sqrt(((x_idx - hole_cx) ** 2 + (y_idx - hole_cy) ** 2))
-    mask = np.logical_and(dist <= outer_radius, dist >= inner_radius)
-    ring_data = []
-    for i in range(len(data_array)):
-        data = np.where(mask, data_array[i], np.nan)
-        ring_data.append(data)
+    clean_data = []
+    bkg_data = []
 
-    ring_data = np.array(ring_data)
-    if plot_image == True:
-        img3 = plt.imshow(ring_data[0])
-        plt.colorbar(img3)
-    return (ring_data)
+    empty_array = np.empty(np.shape(image))
+    empty_array = (ma.masked_array(empty_array, mask=True))
+    empty_array[0, 0] = np.mean(image[0:CORNER_RADIUS, 0:CORNER_RADIUS])
+    empty_array[-1, 0] = np.mean(image[-CORNER_RADIUS:, 0:CORNER_RADIUS])
+    empty_array[0, -1] = np.mean(image[0:CORNER_RADIUS, -CORNER_RADIUS:])
+    empty_array[-1, -1] = np.mean(image[-CORNER_RADIUS:, -CORNER_RADIUS:])
+    empty_array = pd.DataFrame(empty_array).interpolate(axis=0)
+    empty_array = pd.DataFrame(empty_array).interpolate(axis=1)
+    bkg = pd.DataFrame.to_numpy(empty_array)
+    bkg_data.append(bkg)
+    clean_data.append(image - bkg)
 
+    return np.array(clean_data), np.array(bkg_data)
+
+
+def remove_background_pool(data_array, remove_noise=True, plot=False):
+    """ Removing background using concurrent.futures. to spead up process. Calls hidden function _remove_background"""
+    clean_data = []
+    backgrounds = []
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        results = executor.map(_remove_background, data_array)
+
+    for result in results:
+        clean_data.append(result[0])
+        backgrounds.append(results[1])
+
+    clean_data = np.array(clean_data)
+    backgrounds = np.array(backgrounds)
+
+    if plot == True:
+        plt.figure()
+
+        plt.subplot(1, 3, 1)
+        plt.imshow(data_array[0])
+        plt.colorbar()
+        plt.title("Original Data")
+
+        plt.subplot(1, 3, 2)
+        plt.imshow(backgrounds[0])
+        plt.colorbar()
+        plt.title("Interpolated Background")
+
+        plt.subplot(1, 3, 3)
+        plt.imshow(clean_data[0])
+        plt.colorbar()
+        plt.title("Background Free Data")
+        plt.show()
+
+    if remove_noise == True:
+        return clean_data
+    else:
+        return backgrounds
+
+
+def subtract_background(data_array, mean_background, plot=True):
+    """Takes in 3d data_array and subtracts each image from the input mean_background 2d array. Returns cleaned
+    data_array
+
+    Arguments:
+        data_array (3d array): original data array
+        mean_background (2d array): average of background images
+
+    Optional Arguments:
+        plot (boolean): Default is True. Plots example original image and background subtracted image
+
+    Returns:
+        clean_data (3d array): data_array - mean_background"""
+
+    clean_data = data_array - mean_background
+
+    if plot == True:
+        plt.figure()
+        plt.subplot(1, 2, 1)
+        plt.imshow(data_array[0])
+        plt.title("Original Image")
+
+        plt.subplot(1, 2, 2)
+        plt.imshow(clean_data[0])
+        plt.title("Cleaned Image")
+        plt.tight_layout()
+        plt.show()
+
+    return clean_data
+
+
+# Masking and Center Finding Functions
 
 def mask_generator_alg(data_array_1d, mask_center, mask_radius, fill_value=np.nan, add_mask=[], add_rectangular=False):
     """
@@ -801,7 +799,7 @@ def mask_generator_alg(data_array_1d, mask_center, mask_radius, fill_value=np.na
 
 
 def apply_mask(data_array, mask_center, mask_radius, fill_value=np.nan, add_mask=[], add_rectangular=False,
-               plot=False): # todo change mask parameters to global variables
+               plot=False):  # todo change mask parameters to global variables
     """ Applies a mask to individual images in the data array.
 
     Arguments:
@@ -828,8 +826,8 @@ def apply_mask(data_array, mask_center, mask_radius, fill_value=np.nan, add_mask
 
     """
     mean_data = np.nanmean(data_array, axis=0)
-    masked_data = data_array*mask_generator_alg(mean_data, mask_center, mask_radius, fill_value, add_mask,
-                                                add_rectangular)
+    masked_data = data_array * mask_generator_alg(mean_data, mask_center, mask_radius, fill_value, add_mask,
+                                                  add_rectangular)
     masked_mean = np.nanmean(masked_data, axis=0)
 
     print(masked_data.shape)
@@ -863,7 +861,6 @@ def apply_mask(data_array, mask_center, mask_radius, fill_value=np.nan, add_mask
 
         # Show the combined figure
         plt.show()
-
 
     return masked_data
 
@@ -960,7 +957,7 @@ def finding_center_alg(data_array, plot=False, title='Reference Image', thresh_i
     return center_x, center_y, radius, thresh
 
 
-def find_center_parallel(data_array, plot=True, print_stats=True):
+def find_center_pool(data_array, plot=True, print_stats=True):
     """ Finds center of each image in the data array using concurrent.futures.ThreadPoolExecutor to quickly process
     many data files.
 
@@ -1023,10 +1020,7 @@ def find_center_parallel(data_array, plot=True, print_stats=True):
 
 
 ### Azimuthal Averaging and Radial Outlier Removal Functions
-
-# high standard deviation checking and removing
-
-def get_azi_ave(image, center=None):
+def _preprocess_radial_data(image, center=None, plot=False):
     """Takes a single 2d array and converts to polar coordinates based on the supplied center value. Then calculates
     the average and standard deviation at each radial distance. Returns the azimuthal average and standard deviation
     as well as the image in polar coordinates.
@@ -1040,12 +1034,13 @@ def get_azi_ave(image, center=None):
         azi_std (1d array): standard deviation for each radius
         polar_image (2d array): original image converted to polar coordinates"""
 
+    from scipy.interpolate import griddata
 
     if center is None:
         center = (image.shape[1] // 2, image.shape[0] // 2)  # Assuming center is at the middle
 
     # Create meshgrid of coordinates
-    y, x = np.indices(image.shape[:2])
+    x, y = np.indices(image.shape[:2])
 
     # Convert coordinates to polar coordinates
     theta = np.arctan2(y - center[1], x - center[0])
@@ -1054,7 +1049,7 @@ def get_azi_ave(image, center=None):
     # Normalize rho to [0, max_radius] for image indexing
     max_radius = np.sqrt(center[0] ** 2 + center[1] ** 2)
     # max_radius = len(image[0]) - min(center)
-    print(max_radius)
+
     rho_normalized = (rho / max_radius) * (image.shape[0] / 2)
 
     # Convert theta to degrees and ensure it's within [0, 360]
@@ -1071,9 +1066,52 @@ def get_azi_ave(image, center=None):
 
     azi_ave = np.nanmean(polar_image, axis=1)
     azi_std = np.nanstd(polar_image, axis=1)
-    return azi_ave, azi_std, polar_image
 
-def remove_radial_outliers(image, center, plot=False, fill_value = 'nan'):
+    # Create the Cartesian coordinate grid
+    dimension = len(image)
+    radius = np.arange(0, len(azi_ave))
+    x = np.arange(dimension) - center[0]
+    y = np.arange(dimension) - center[1]
+    X, Y = np.meshgrid(x, y)
+
+    # Convert Cartesian coordinates to polar coordinates
+    R = np.sqrt(X ** 2 + Y ** 2)
+    Theta = np.arctan2(Y, X)
+
+    # Normalize R to match the radius array
+    # Define the full polar grid
+    theta_full = np.linspace(-np.pi, np.pi, dimension)
+    radius_full, theta_full = np.meshgrid(radius, theta_full)
+
+    # Flatten the polar grid arrays for interpolation
+    radius_flat = radius_full.flatten()
+    theta_flat = theta_full.flatten()
+
+    # Expand polar data to match the full grid shape
+    polar_data_ave = np.tile(azi_ave, (theta_full.shape[0], 1)).flatten()
+    polar_data_std = np.tile(azi_std, (theta_full.shape[0], 1)).flatten()
+
+    # Interpolate the polar data to the Cartesian grid
+    remapped_data = griddata((radius_flat, theta_flat), polar_data_ave,
+                             (R.flatten(), Theta.flatten()), method='linear')
+    remapped_std = griddata((radius_flat, theta_flat), polar_data_std,
+                            (R.flatten(), Theta.flatten()), method='linear')
+
+    # Reshape the interpolated data to the Cartesian grid dimensions
+    remapped_data = remapped_data.reshape(dimension, dimension)
+    remapped_std = remapped_std.reshape(dimension, dimension)
+
+    # Plot the Cartesian image
+    if plot == True:
+        plt.imshow(remapped_data, origin='lower', extent=(-center[0], center[0], -center[1], center[1]))
+        plt.colorbar()
+        plt.title('Cartesian Image from Polar Data')
+        plt.show()
+
+    return remapped_data, remapped_std
+
+
+def remove_radial_outliers(image, center, fill_value='nan', std_factor=5, plot=False, count=None):
     """Takes a single 2d image and identifies instances where the pixel value at any radius is an outlier. The bad pixel
     is then replaced with either np.nan or the interpolated average value.
 
@@ -1084,99 +1122,92 @@ def remove_radial_outliers(image, center, plot=False, fill_value = 'nan'):
 
     Optional Arguments:
         plot (boolean): Default set to False. When true, plots the input image and the cleaned image.
-        fill_value (string of either 'nan' or 'ave'): defines whether bad pixels are replaced by np.nan or average
+        fill_value (string of either 'nan' or 'ave'): Default set to 'nan'. defines whether bad pixels are replaced by
+            np.nan or average
+        std_factor (int): Default set to 3. Defines standard deviation threshold for removing bad instances
 
     Returns:
         clean_image (2d array): image with outliers removed
         idx_outliers (list): coordinates for outlier pixels"""
-    radial_avgs, radial_stdevs, _ = get_azi_ave(image)
-    new_image = np.empty((len(image[0]), len(image[1])))
-    new_image.fill(np.nan)
-    x_center = center[0]
-    y_center = center[1]
-    #idx_outliers = np.ones((len(image[0]), len(image[1])))
-    idx_outliers = []
+    image = np.array(image)
+
+    clean_image = np.copy(image)
+    ave_image, std_image = _preprocess_radial_data(image, center)
+    bad_idx = np.logical_or(image >= ave_image + std_factor * std_image, image <= ave_image - std_factor * std_image)
+    pct_removed = np.sum(bad_idx) / (len(image) * len(image)) * 100
+    print(f"{pct_removed}% of pixels were removed.")
+
     if fill_value == 'nan':
-        for x in range(len(image[0])):
-            for y in range(len(image[1])):
-                R = sqrt((x - x_center) ** 2 + (y - y_center) ** 2)
-                # Calculate the interpolated value for the average and stdev at this R
-                # (Same thing I do in simulate_image but now I'm calculating the weighted average of the
-                # average intensity values so the language is a little confusing)
-                interpolated_avg, interpolated_stdev = 0, 0  # Will be filled in with the interpolated values
-
-                R_lower = floor(R)
-                R_upper = R_lower + 1
-                if R_lower >= len(radial_avgs):
-                    interpolated_avg = 0  # R value is out of bounds, default to 0
-                    interpolated_stdev = 0
-                elif R_upper >= len(radial_avgs):
-                    interpolated_avg = radial_avgs[R_lower]  # R value is just outside of bounds, default to edge value
-                    interpolated_stdev = radial_stdevs[R_lower]
-                else:
-                    # Calculate weighted average
-                    interpolated_avg = (R - R_lower) * radial_avgs[R_upper] + (R_upper - R) * radial_avgs[R_lower]
-                    interpolated_stdev = (R - R_lower) * radial_stdevs[R_upper] + (R_upper - R) * radial_stdevs[R_lower]
-
-                if abs(image[x][y] - interpolated_avg) <= 3 * interpolated_stdev:
-                    # Value is within acceptance range, do not change
-                    new_image[x][y] = image[x][y]
-                else:
-                    # Value is outside acceptance range, use average value instead
-                    new_image[x][y] = np.nan
-                    idx_outliers.append([x, y])
-
-    if fill_value == 'ave':
-        for x in range(len(image[0])):
-            for y in range(len(image[1])):
-                R = sqrt((x - x_center) ** 2 + (y - y_center) ** 2)
-                # Calculate the interpolated value for the average and stdev at this R
-                # (Same thing I do in simulate_image but now I'm calculating the weighted average of the
-                # average intensity values so the language is a little confusing)
-                interpolated_avg, interpolated_stdev = 0, 0  # Will be filled in with the interpolated values
-
-                R_lower = floor(R)
-                R_upper = R_lower + 1
-                if R_lower >= len(radial_avgs):
-                    interpolated_avg = 0  # R value is out of bounds, default to 0
-                    interpolated_stdev = 0
-                elif R_upper >= len(radial_avgs):
-                    interpolated_avg = radial_avgs[R_lower]  # R value is just outside of bounds, default to edge value
-                    interpolated_stdev = radial_stdevs[R_lower]
-                else:
-                    # Calculate weighted average
-                    interpolated_avg = (R - R_lower) * radial_avgs[R_upper] + (R_upper - R) * radial_avgs[R_lower]
-                    interpolated_stdev = (R - R_lower) * radial_stdevs[R_upper] + (R_upper - R) * radial_stdevs[R_lower]
-
-                if abs(image[x][y] - interpolated_avg) <= 3 * interpolated_stdev:
-                    # Value is within acceptance range, do not change
-                    new_image[x][y] = image[x][y]
-                else:
-                    # Value is outside acceptance range, use average value instead
-                    new_image[x][y] = interpolated_avg
-                    idx_outliers.append([x, y])
-
-    pct_outlier = (len(idx_outliers)/(len(image[0])*len(image[1])))*100
-    print(f"Percent outliers in image is {pct_outlier:.2f}.")
+        clean_image[bad_idx] = np.nan
+    elif fill_value == 'ave':
+        clean_image[bad_idx] = ave_image[bad_idx]
 
     if plot == True:
-        plt.figure(figsize=(14, 8))
-        plt.subplot(1, 2, 1)
-        plt.imshow(np.log(image), cmap='bwr')
-        plt.colorbar()
-        plt.clim(6, 7)
-        plt.title('Original Image')
+        plt.figure()
+        plt.subplot(1, 3, 1)
+        plt.imshow(np.log(image))
+        # plt.xlim(300, 600)
+        # plt.ylim(300, 600)
+        plt.title("Original Image")
 
-        plt.subplot(1, 2, 2)
-        plt.imshow(np.log(new_image), cmap='bwr')
-        plt.colorbar()
-        plt.clim(6, 7)
-        plt.title('New Image')
+        plt.subplot(1, 3, 2)
+        plt.imshow(np.log(ave_image))
+        # plt.xlim(300, 600)
+        # plt.ylim(300, 600)
+        plt.title("Average Image")
 
+        plt.subplot(1, 3, 3)
+        plt.imshow(np.log(clean_image))
+        # plt.xlim(300, 600)
+        # plt.ylim(300, 600)
+        plt.title("Cleaned Image")
+
+        plt.tight_layout()
         plt.show()
-    return new_image, idx_outliers
+
+    return clean_image, bad_idx
 
 
+def remove_radial_outliers_pool(data_array, center, plot=True):
+    clean_data = []
+    amt_removed = []
+
+    if len(center) > 2:
+        print("Using all center values ")
+        print("Removing radial outliers from all data")
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            # Zip the arrays together and submit to the executor
+            results = list(executor.map(lambda args: remove_radial_outliers(*args), zip(data_array, center)))
+            clean_data.append(results[0])
+            amt_removed.append(results[1])
+        for result in results:
+            data, amt = result
+            clean_data.append(data)
+            amt_removed.append(amt)
+
+    elif len(center) == 2:
+        print("Using average center")
+        print("Removing radial outliers from all data")
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            futures = [executor.submit(partial(remove_radial_outliers, data), center) for data in data_array]
+            results = [future.result() for future in futures]
+
+        for result in results:
+            data, amt = result
+            clean_data.append(data)
+            amt_removed.append(amt)
+
+    pct_rmv = np.array(amt_removed) / (len(data_array[1]) * len(data_array[2])) * 100
+
+    if plot == True:
+        plt.figure()
+        plt.plot(pct_rmv)
+        plt.title("Percent Pixels Removed")
+        plt.xlabel("Image Number")
+        plt.ylabel("Percent")
+        plt.show()
+
+    return clean_data
 
 ### PDF Generating Functions
 # todo add theses functions
