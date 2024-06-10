@@ -4,6 +4,7 @@ import numpy as np
 import numpy.ma as ma
 from tifffile import tifffile as tf
 import matplotlib.pyplot as plt
+import matplotlib
 import pandas as pd
 import scipy.signal as ss
 import concurrent.futures
@@ -488,7 +489,7 @@ def remove_counts(data_array, stage_positions, file_order, counts, std_factor=3,
     return new_array, new_stage_positions, new_file_order, new_counts
 
 
-def remove_background(data_array, remove_noise=True, plot=False, print_status=True):  # todo parallelize
+def remove_background(data_array, remove_noise=True, plot=False, print_status=True):  
     """
     Takes in a 3d data array and calculates the means of the corners then linearly interpolates values based on corners across 3d array to 
     generate of background noise values using pandas.DataFrame.interpolate.
@@ -663,29 +664,130 @@ def remove_background_pool(data_array, remove_noise=True, plot=False):
     backgrounds = np.array(backgrounds)
 
     if plot == True:
-        plt.figure()
+        fig = plt.figure(figsize = (12,4)) # Plot counts rate, images number at each posi, and bad images
+            
+        fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+        vmin_1_1, vmax_1_1 = 10**-0, 4000 
 
-        plt.subplot(1, 3, 1)
-        plt.imshow(data_array[0])
-        plt.title("Original Data")
+        #Before
+        img1 = axes[0].imshow(data_array[0], cmap='plasma', norm=matplotlib.colors.LogNorm(vmin=vmin_1_1, vmax=vmax_1_1))
+        axes[0].set_title('Original Data with Outliers Removed')
+        axes[0].set_xlabel('X-position')
+        axes[0].set_ylabel('Y-position')
+        colorbar1 = fig.colorbar(img1, ax=axes[0])  # Add colorbar to the first subplot
 
-        plt.subplot(1, 3, 2)
-        plt.imshow(backgrounds[0])
-        plt.title("Interpolated Background")
+        #Noise
+        img2 = axes[1].imshow(backgrounds[0], cmap='plasma',  norm=matplotlib.colors.LogNorm(vmin=vmin_1_1, vmax=vmax_1_1))  
+        # Use the same normalization as img1
+        axes[1].set_title('Interpolated Noise Data')
+        axes[1].set_xlabel('X-position')
+        axes[1].set_ylabel('Y-position')
+        colorbar2 = fig.colorbar(img2, ax=axes[1])  # Add colorbar to the second subplot
 
-        plt.subplot(1, 3, 3)
-        plt.imshow(clean_data[0])
-        plt.title("Background Free Data")
-        plt.tight_layout()
-        plt.show()
-
+        # Noise Removed
+        img3 = axes[2].imshow(clean_data[0], cmap='plasma',  norm=matplotlib.colors.LogNorm(vmin=vmin_1_1, vmax=vmax_1_1))  # Logarithmic scaling
+        axes[2].set_title('After Background Removal')
+        axes[2].set_xlabel('X-position')
+        axes[2].set_ylabel('Y-position')
+        colorbar3 = fig.colorbar(img3, ax=axes[2])  # Add colorbar to the third subplot
     if remove_noise == True:
         return clean_data
     else:
         return backgrounds
 
 
-def remove_xrays_pool(data_array, plot=True, std_factor=3):
+def _remove_xrays(mean_data, std_data, image, std_factor=4):
+    """This is the hidden function that is run within the remove_xrays_pool function.
+
+    ARGUMENTS:
+
+    mean_data (2d array): 
+        average image of all data in data_array from parent function.
+    std_data (2d array): 
+        image with standard deviation values from all data in data_array in parent function.
+    image (2d array): 
+        array of image like data with length N where N is number of images.
+
+    OPTIONAL ARGUMENTS:
+
+    std_factor (int): 
+        Default set to 3. Defines the threshold for removing pixels with |pixel_value - mean| > std_factor*std
+
+    RETURNS:
+
+    clean_data (2d array): 
+        array of image like data with shape of input data array where errant pixels are now masked based on the set threshold
+        amt_rmv (int): count of all pixels removed per image
+
+    """
+
+    upper_threshold = mean_data + std_factor * std_data
+    clean_data = ma.masked_greater_equal(image, upper_threshold)
+    amt_rmv = np.sum(clean_data.mask)
+    return clean_data, amt_rmv
+
+
+def remove_xrays(data_array, plot=True): # testing for timing
+
+    """
+    Filters out any pixels that are more than set threshold value based on the standard deviation of the
+    average pixel value by running the hidden function _remove_xrays in parallel.
+
+    ARGUMENTS:
+
+    data_array (3d array): 
+        array of image like data with length N where N is number of images.
+
+    OPTIONAL ARGUMENTS:
+
+    plot (boolean): 
+        Default set to True. Plots the percentage of pixeled removed during cleaning process
+    std_factor (int): 
+        Default set to 3. Defines the threshold for removing pixels with |pixel_value - mean| > std_factor*std
+
+    RETURNS:
+
+    clean_data (3d array): 
+        array of image like data with shape of input data array where errant pixels are now masked based on the set threshold
+
+    """
+
+    mean_data = np.mean(data_array, axis=0)
+    std_data = np.std(data_array, axis=0)
+    print("Removing hot pixels from all data")
+
+    clean_data = []
+    amt_rmv = []
+
+    for i in range(len(data_array)):
+        clean, amt = _remove_xrays(data_array[i], mean_data, std_data)
+        clean_data.append(clean)
+        amt_rmv.append(amt)
+
+    pct_rmv = np.array(amt_rmv) / (len(data_array[1]) * len(data_array[2])) * 100
+
+    if plot == True:
+        plt.figure()
+        plt.subplot(1, 3, 1)
+        plt.plot(pct_rmv)
+        plt.title("Percent Pixels Removed")
+        plt.xlabel("Image Number")
+        plt.ylabel("Percent")
+
+        plt.subplot(1, 3, 2)
+        plt.imshow(data_array[0])
+        plt.title("Original Image")
+
+        plt.subplot(1, 3, 3)
+        plt.imshow(clean_data[0])
+        plt.title("Cleaned Image")
+        plt.tight_layout()
+        plt.show()
+
+    return clean_data
+
+
+def remove_xrays_pool(data_array, plot=True, std_factor=4):
     """
     Filters out any pixels that are more than set threshold value based on the standard deviation of the
     average pixel value by running the hidden function _remove_xrays in parallel.
@@ -713,7 +815,7 @@ def remove_xrays_pool(data_array, plot=True, std_factor=3):
     std_data = np.std(data_array, axis=0)
     print("Removing hot pixels from all data")
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = [executor.submit(partial(_remove_xrays, mean_data, std_data, std_factor), data) for
+        futures = [executor.submit(partial(_remove_xrays, mean_data, std_data), data) for
                    data in data_array]
         results = [future.result() for future in futures]
 
@@ -744,51 +846,7 @@ def remove_xrays_pool(data_array, plot=True, std_factor=3):
         plt.tight_layout()
         plt.show()
 
-    return clean_data
-
-
-def _remove_xrays(data_array_1d, mean_data, std_data, std_factor=3):
-    """This is the hidden function that is run within the remove_xrays_pool function.
-
-    ARGUMENTS:
-
-    data_array (2d array): 
-        array of image like data with length N where N is number of images.
-    mean_data (2d array): 
-        average image of all data in data_array from parent function.
-    std_data (2d array): 
-        image with standard deviation values from all data in data_array in parent function.
-
-    OPTIONAL ARGUMENTS:
-
-    std_factor (int): 
-        Default set to 3. Defines the threshold for removing pixels with |pixel_value - mean| > std_factor*std
-
-    RETURNS:
-
-    clean_data (2d array): 
-        array of image like data with shape of input data array where errant pixels are now masked based on the set threshold
-        amt_rmv (int): count of all pixels removed per image
-
-    """
-
-    upper_threshold = mean_data + std_factor * std_data
-    clean_data = ma.masked_greater_equal(data_array_1d, upper_threshold)
-    amt_rmv = np.sum(clean_data.mask)
-    return clean_data, amt_rmv
-
-
-def remove_xrays(data_array): # testing for timing
-
-    mean_data = np.nanmean(data_array, axis=0)
-    std_data = np.nanstd(data_array, axis=0)
-    clean_data = []
-    for i in range(len(data_array)):
-        temp, _ = _remove_xrays(data_array[0], mean_data, std_data)
-        clean_data.append(temp)
-    
-    clean_data = np.array(clean_data)
-    return clean_data
+    return np.array(clean_data)
 
 
 def subtract_background(data_array, mean_background, plot=True):
@@ -950,7 +1008,7 @@ def apply_mask(data_array, mask_center, mask_radius, fill_value=np.nan, add_mask
     return masked_data
 
 
-def finding_center_alg(data_array, plot=False, title='Reference Image', thresh_input=0):
+def finding_center_alg(image, plot=False, title='Reference Image', thresh_input=0):
     """
     Algorithm for finding the center of diffraction pattern
 
@@ -981,17 +1039,19 @@ def finding_center_alg(data_array, plot=False, title='Reference Image', thresh_i
     """
 
     if thresh_input == 0:
-        thresh = threshold_otsu(data_array)
+        thresh = threshold_otsu(image)
     else:
         thresh = thresh_input
 
     cxt, cyt = [], []
+    ## apply median filter to help
+    image = ss.medfilt2d(image, kernel_size=9)
     for th in [1]:
         thresh *= th
-        mask_temp = mask_generator_alg(data_array, CENTER_GUESS, RADIUS_GUESS * th, fill_value=False, add_mask=[],
+        mask_temp = mask_generator_alg(image, CENTER_GUESS, RADIUS_GUESS * th, fill_value=False, add_mask=[],
                                        add_rectangular=False)
         mask_temp = util.invert(mask_temp.astype(bool))
-        bw = closing(data_array > thresh, disk(
+        bw = closing(image > thresh, disk(
             DISK_RADIUS))  # Return grayscale morphological closing of an image. Square(): generate the footprint to close the gap between data points
         cleared = clear_border(bw + mask_temp)
         label_image = label(cleared)
@@ -1010,7 +1070,7 @@ def finding_center_alg(data_array, plot=False, title='Reference Image', thresh_i
 
     if plot == True:
         fig, (ax1, ax2, ax3) = plt.subplots(nrows=1, ncols=3, figsize=(20, 10))
-        ax1.imshow(data_array)
+        ax1.imshow(image)
         ax2.imshow(label_image)
         ax3.imshow(bw)
 
@@ -1115,8 +1175,65 @@ def find_center_pool(data_array, plot=True, print_stats=True):
     return center_x, center_y
 
 
+def _median_filter(image, kernel_size = 5):
+    """
+    Applies the scipy.ndimage.median_filter function to the image then returns the filtered image"""
+
+    #corners = (np.median(data_array_1d[-50:, -50:]), np.median(data_array_1d[-50:, :50]), np.median(data_array_1d[:50, -50:]), 
+                    #np.median(data_array_1d[:50, :50]))
+    #floor = float(np.mean(corners))
+    from scipy.ndimage import median_filter
+    filt_data = median_filter(image, kernel_size)
+
+    return filt_data
+
+
+def median_filter_pool(data_array, plot=True):
+    """Takes in a large 3D array of data and applies the scipy.ndimage.median_filter on them in parallel processing using the hidden function
+    _median_filter.
+
+    ARGUMENTS: 
+
+    data_array (3d array):
+        array of all images
+    
+    OPTIONAL ARGUMENTS:
+
+    plot(boolean): Default set to True
+        When true, plots an example of the original and of the filtered image
+
+    RETURNS: 
+        
+    filtered_data (3d array):
+        filtered data array of the same size as the input array"""
+    
+    print('Cleaning all data with concurrent.futures.ProcessPoolExecutor')
+    filtered_data = []
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        results = executor.map(_median_filter, data_array)
+        
+    for result in results:
+        filtered_data.append(result)
+    
+    filtered_data = np.array(filtered_data)
+    print(filtered_data.shape)
+    print("Finished cleaning!!")
+
+    if plot == True:
+        plt.figure()
+        plt.subplot(1,2,1)
+        plt.imshow(data_array[0])
+        plt.title("Original Image")
+        
+        plt.subplot(1,2,2)
+        plt.imshow(filtered_data[0])
+        plt.title("Filtered Image")
+        plt.show()
+
+    return filtered_data
+
 ### Azimuthal Averaging and Radial Outlier Removal Functions
-def _preprocess_radial_data(image, center=None, plot=False):
+def _preprocess_radial_data(center, image, plot=False):
     """
     Takes a single 2d array and converts to polar coordinates based on the supplied center value. Then calculates
     the average and standard deviation at each radial distance. Returns the azimuthal average and standard deviation
@@ -1214,7 +1331,7 @@ def _preprocess_radial_data(image, center=None, plot=False):
     return remapped_data, remapped_std
 
 
-def remove_radial_outliers(image, center, fill_value='nan', std_factor=5, plot=False, count=None):
+def remove_radial_outliers(center, image, fill_value='nan', std_factor=5, plot=False, print_summary=False):
     """
     Takes a single 2d image and identifies instances where the pixel value at any radius is an outlier. The bad pixel
     is then replaced with either np.nan or the interpolated average value.
@@ -1247,7 +1364,7 @@ def remove_radial_outliers(image, center, fill_value='nan', std_factor=5, plot=F
     image = np.array(image)
 
     clean_image = np.copy(image)
-    ave_image, std_image = _preprocess_radial_data(image, center)
+    ave_image, std_image = _preprocess_radial_data(center, image)
     bad_idx = np.logical_or(image >= ave_image + std_factor * std_image, image <= ave_image - std_factor * std_image)
     pct_removed = np.sum(bad_idx) / (len(image) * len(image)) * 100
     #print(f"{pct_removed}% of pixels were removed.")
@@ -1279,6 +1396,9 @@ def remove_radial_outliers(image, center, fill_value='nan', std_factor=5, plot=F
 
         plt.tight_layout()
         plt.show()
+
+    if print_summary == True:
+        print(f"{pct_removed}% of pixels were removed for this image")
 
     return clean_image, bad_idx, pct_removed, ave_image
 
@@ -1330,7 +1450,7 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
         print("Using average center")
         print("Removing radial outliers from all data")
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            futures = [executor.submit(partial(remove_radial_outliers, data), center) for data in data_array]
+            futures = [executor.submit(partial(remove_radial_outliers, center), data) for data in data_array]
             results = [future.result() for future in futures]
 
         for result in results:
@@ -1370,7 +1490,7 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
     return clean_data
 
 
-def _azimuthal_average(image, center):
+def _azimuthal_average(center, image, normalize=True):
     """
     ADD DOC STRING
     """
@@ -1383,7 +1503,8 @@ def _azimuthal_average(image, center):
 
     # Normalize rho to [0, max_radius] for image indexing
     max_radius = np.sqrt(center[0] ** 2 + center[1] ** 2)
-    # max_radius = len(image[0]) - min(center)
+    print(f"Max radius = {max_radius}")
+    #max_radius = len(image[0]) - min(center)
 
     rho_normalized = (rho / max_radius) * (image.shape[0] / 2)
 
@@ -1405,8 +1526,7 @@ def _azimuthal_average(image, center):
     return azi_ave, azi_std
 
 
-
-def get_azimuthal_average_pool(data_array, center, plot=False):
+def get_azimuthal_average_pool(data_array, center, normalize=False, plot=False):
     """
     ADD DOC STRING and test
     """
@@ -1415,7 +1535,7 @@ def get_azimuthal_average_pool(data_array, center, plot=False):
 
     if len(center) > 2:
         print("Using all center values ")
-        print("Removing radial outliers from all data")
+        print("Calculating azimuthal average for all data")
         with concurrent.futures.ProcessPoolExecutor() as executor:
             # Zip the arrays together and submit to the executor
             results = list(executor.map(lambda args: _azimuthal_average(*args), zip(data_array, center)))
@@ -1426,9 +1546,9 @@ def get_azimuthal_average_pool(data_array, center, plot=False):
 
     elif len(center) == 2:
         print("Using average center")
-        print("Removing radial outliers from all data")
+        print("Calculating azimuthal average for all data")
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            futures = [executor.submit(partial(_azimuthal_average, data), center) for data in data_array]
+            futures = [executor.submit(partial(_azimuthal_average, center), data) for data in data_array]
             results = [future.result() for future in futures]
 
         for result in results:
@@ -1439,33 +1559,60 @@ def get_azimuthal_average_pool(data_array, center, plot=False):
     average_data = np.array(average_data)
     std_data = np.array(std_data)
 
+    if normalize == True:
+        norm_data = normalize_to_baseline(average_data)
+        average_data = norm_data
+
+
     if plot == True:
         plt.figure()
         plt.plot(average_data[0])
         plt.title("Example of Azimuthal Average")
         plt.show()
 
-    if normalize == True:
-        norm_data = []
-        for ave in average_data:
-            norm = normalize_to_baseline(ave)
-            norm_data.append(norm)
-        average_data = np.array(norm_data)
-
-
     return average_data, std_data
 
-def normalize_to_baseline(data, min_val=200, max_val=300):  # todo add docstring and optimize
-    data[:, :25] = np.nan
-    data_mean = np.nanmean(data, axis=0)
+
+def normalize_to_baseline(image, min_val=50, max_val=100):  # todo add docstring and optimize
+    image[:, :25] = np.nan
+    data_mean = np.nanmean(image, axis=0)
     norm_factor = np.nansum(data_mean[min_val:max_val])
     data_norm = []
-    for i in range(len(data)):
-        offset = np.nansum(data[i, min_val:max_val])
-        norm = data[i] * (norm_factor / offset)
+    for i in range(len(image)):
+        offset = np.nansum(image[i, min_val:max_val])
+        norm = image[i] * (norm_factor / offset)
         data_norm.append(norm)
 
     data_norm = np.array(data_norm)
     return data_norm
+
+
+def power_fit(data_array, x_vals, return_baseline=False):
+    if len(data_array.shape) == 2:
+        baseline2d = []
+        for i in range(len(data_array)):
+            temp_data = np.copy(data_array[i])
+            idx_nan = ~np.isnan(temp_data)
+            coeff = np.polyfit(x_vals[idx_nan],temp_data[idx_nan],2)
+            baseline = np.polyval(coeff,x_vals)
+            baseline2d.append(baseline)
+
+        baseline2d = np.array(baseline2d)
+        corrected_data = data_array - baseline2d
+        
+    elif len(data_array.shape) == 1:
+        temp_data = data_array
+        idx_nan = ~ np.isnan(temp_data)
+        coeff = np.polyfit(x_vals[idx_nan], temp_data[idx_nan], 2)
+        baseline2d = np.polyval(coeff, x_vals)
+        
+        corrected_data = data_array - baseline2d
+    else:
+        print("Data Array must be 1D or 2D array")
+    if return_baseline == True:
+        return corrected_data, baseline2d
+    else:
+        return corrected_data
+
 ### PDF Generating Functions
 # todo add theses functions
