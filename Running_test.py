@@ -74,7 +74,7 @@ mask_center = [475,475]
 mask_radius = 45
 
 # Apply Mask
-data_array = gued.apply_mask(data_array, mask_center, mask_radius, add_mask=[[440, 435, 30]], plot=False)
+data_array = gued.apply_mask(data_array, mask_center, mask_radius, ADDED_MASK=[[440, 435, 30]], plot=False)
 
 stop = time.perf_counter()
 print(f"Masked data in {stop-start} seconds")

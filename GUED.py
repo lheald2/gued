@@ -890,7 +890,7 @@ def subtract_background(data_array, mean_background, plot=True):
 
 # Masking and Center Finding Functions
 
-def mask_generator_alg(image, mask_center, mask_radius, fill_value=np.nan, add_mask=[], add_rectangular=False):
+def mask_generator_alg(image, fill_value=np.nan, add_rectangular=False):
     """
     Generate mask to cover unwanted area
 
@@ -898,18 +898,25 @@ def mask_generator_alg(image, mask_center, mask_radius, fill_value=np.nan, add_m
 
     image : 2D array
         Diffraction pattern.
-    mask_center : 1D array, tuple, or list that contains only two values
-        Center for generating mask cover unscattered electron beam.
-    mask_radius : int
-        Radius of the mask.
+
+    OPTIONAL ARGUMENTS: 
+
     fill_value : int, float, or nan, optional
         Value that use to fill the area of the mask. The default is np.nan.
-    add_mask : list of 3-value-lists, optional
-        Additional masks. Input gonna be [[x-center, y-center, radius], [...], ...] The default is [].
     add_rectangular : boolean, optional
         Additional mask with rectangular shape. The default is True.
     showingfigure : boolean, optional
         Show figure of the result of applied masks. The default is False.
+
+    GLOBAL VARIABLES:
+
+    MASK_CENTER : 1D array, tuple, or list that contains only two values
+        Center for generating mask cover unscattered electron beam.
+    MASK_RADIUS : int
+        Radius of the mask.
+    ADDDED_MASK : list of 3-value-lists, optional
+        Additional masks. Input gonna be [[x-center, y-center, radius], [...], ...] The default is [].
+
 
     RETURNS:
     
@@ -919,13 +926,13 @@ def mask_generator_alg(image, mask_center, mask_radius, fill_value=np.nan, add_m
     """
 
     mask = np.ones(image.shape)
-    rows, cols = draw.disk((mask_center[1], mask_center[0]), mask_radius, shape=mask.shape)
+    rows, cols = draw.disk((MASK_CENTER[1], MASK_CENTER[0]), MASK_RADIUS, shape=mask.shape)
     mask[rows, cols] = fill_value
 
-    if len(add_mask) == 0:
+    if len(ADDED_MASK) == 0:
         pass
     else:
-        for i in add_mask:
+        for i in ADDED_MASK:
             rows, cols = draw.disk((i[1], i[0]), i[2], shape=mask.shape)
             mask[rows, cols] = fill_value
 
@@ -938,7 +945,7 @@ def mask_generator_alg(image, mask_center, mask_radius, fill_value=np.nan, add_m
     return mask
 
 
-def apply_mask(data_array, mask_center, mask_radius, fill_value=np.nan, add_mask=[], add_rectangular=False,
+def apply_mask(data_array, fill_value=np.nan, add_rectangular=False,
                plot=False):  # todo change mask parameters to global variables
     """ Applies a mask to individual images in the data array.
 
@@ -946,21 +953,24 @@ def apply_mask(data_array, mask_center, mask_radius, fill_value=np.nan, add_mask
 
     data_array_1d : 2D array
         Diffraction pattern.
-    mask_center : 1D array, tuple, or list that contains only two values
-        Center for generating mask cover unscattered electron beam.
-    mask_radius : int
-        Radius of the mask.
 
     OPTIONAL ARUGMENTS:
 
     fill_value : int, float, or nan, optional
         Value that use to fill the area of the mask. The default is np.nan.
-    add_mask : list of 3-value-lists, optional
-        Additional masks. Input gonna be [[x-center, y-center, radius], [...], ...] The default is [].
     add_rectangular : boolean, optional
         Additional mask with rectangular shape. The default is True.
     showingfigure : boolean, optional
         Show figure of the result of applied masks. The default is False.
+
+    GLOBAL VARIABLES:
+
+    MASK_CENTER : 1D array, tuple, or list that contains only two values
+        Center for generating mask cover unscattered electron beam.
+    MASK_RADIUS : int
+        Radius of the mask.
+    ADDED_MASK : list of 3-value-lists, optional
+        Additional masks. Input gonna be [[x-center, y-center, radius], [...], ...] The default is [].
 
     RETURNS:
 
@@ -969,8 +979,7 @@ def apply_mask(data_array, mask_center, mask_radius, fill_value=np.nan, add_mask
 
     """
     mean_data = np.nanmean(data_array, axis=0)
-    masked_data = data_array * mask_generator_alg(mean_data, mask_center, mask_radius, fill_value, add_mask,
-                                                  add_rectangular)
+    masked_data = data_array * mask_generator_alg(mean_data, fill_value, add_rectangular)
     masked_mean = np.nanmean(masked_data, axis=0)
 
     print(masked_data.shape)
@@ -1016,16 +1025,23 @@ def finding_center_alg(image, plot=False, title='Reference Image', thresh_input=
     
     data_array : 2D array
         Diffraction pattern.
-    DISK_RADIUS : int, optional
-        Generates a flat, disk-shaped footprint. The default is 3.
+
+    OPTIONAL ARGUMENTS:
+
     plot : boolean, optional
         Show figure of the result of center finding. The default is False.
+    title : str, optional
+        Title of the figure. The default is 'Reference image'.
+
+
+    GLOBAL VARIABLES:
+
+    DISK_RADIUS : int, optional
+        Generates a flat, disk-shaped footprint. The default is 3.
     CENTER_GUESS : tuple contains 2 values, optional
         Guessing center position to generate temporary mask. The default is (532, 520).
     RADIUS_GUESS : int, optional
         Guessing radius of the temporary mask. The default is 80.
-    title : str, optional
-        Title of the figure. The default is 'Reference image'.
 
     RETURNS
     
@@ -1048,7 +1064,7 @@ def finding_center_alg(image, plot=False, title='Reference Image', thresh_input=
     image = ss.medfilt2d(image, kernel_size=9)
     for th in [1]:
         thresh *= th
-        mask_temp = mask_generator_alg(image, CENTER_GUESS, RADIUS_GUESS * th, fill_value=False, add_mask=[],
+        mask_temp = mask_generator_alg(image, fill_value=False,
                                        add_rectangular=False)
         mask_temp = util.invert(mask_temp.astype(bool))
         bw = closing(image > thresh, disk(
@@ -1489,6 +1505,95 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
 
     return clean_data
 
+# todo: clean and optimize
+def cart2pol(x, y): 
+    r = np.sqrt(x**2 + y**2)
+    theta = np.arctan2(y, x)
+    return r, theta
+
+def preprocess_for_azimuthal_checking(dat, center):
+    w, h = dat.shape
+    xmat, ymat = np.meshgrid(np.arange(0,w,1)-center[0],np.arange(0,h,1)-center[1])
+    rmat, _ = cart2pol(xmat, ymat)
+    rmat = np.around(rmat)
+    dat = dat.astype(float)
+    xlength = int(np.amax([np.amax(abs(xmat)),np.amax(abs(ymat))]))
+    
+    return xlength, rmat
+
+def cleaning_2d_data(dat, center, correct_factor=3):
+    xlength, rmat = preprocess_for_azimuthal_checking(dat, center)
+    res2d = np.copy(dat)
+    
+    mask_detect = True
+    for i in range(xlength):
+        roi = np.copy(dat[rmat==int(i+1)])
+        if len(roi)==0:
+            break
+        if int(i+1)>=500:
+            break
+        # Check the area of mask so the azimuthal integration will ignore that.
+        if mask_detect==True:
+            if np.sum(np.isnan(roi)) < len(roi):
+                mask_detect=False
+                
+        if mask_detect==False:
+            # remove value that higher or lower than correct_factor*standard deviation
+            roi = outlier_rev_algo(roi, correct_factor=correct_factor)
+        
+        res2d[rmat==int(i+1)] = np.copy(roi)
+    return res2d
+
+# high standard deviation checking and removing
+def outlier_rev_algo(dat1d, correct_factor=3, fill_value = 'nan'):
+    index = np.logical_or(dat1d>=np.nanmean(dat1d)+correct_factor*np.nanstd(dat1d), dat1d<=np.nanmean(dat1d)-correct_factor*np.nanstd(dat1d))
+    if fill_value == 'nan':
+        dat1d[index] = np.nan
+    elif fill_value == 'average':
+        dat1d[index] = np.nanmean(dat1d)
+    return dat1d
+
+def _get_azimuthal_average(dat, center):
+    xlength, rmat = preprocess_for_azimuthal_checking(dat, center)
+    res2d = np.copy(dat)
+    
+    mask_detect = True
+    for i in range(xlength):
+        roi = np.copy(dat[rmat==int(i+1)])
+        if len(roi)==0:
+            break
+        
+        if int(i+1)>=500:
+            break
+        # Check the area of mask so the azimuthal integration will ignore that.
+        if mask_detect==True:
+            if np.sum(np.isnan(roi)) < len(roi):
+                mask_detect=False
+                
+        if mask_detect==False:
+            # remove value that higher or lower than correct_factor*standard deviation
+            r_ave = np.nanmean(roi)
+            print(r_ave)
+
+
+def get_azimuthal_average(data_array, center, normalize=True, plot=False):
+    azimuthal_average = []
+    for i in range(len(data_array)):
+        s0, azi_ave, azi_std = _get_azimuthal_average(data_array[i], center)
+        azimuthal_average.append(azi_ave)
+        print(f"Completed azimuthal average for image {i}")
+    
+    azimuthal_average = np.array(azimuthal_average)
+    if normalize == True:
+        azimuthal_average = normalize_to_baseline(azimuthal_average)
+    
+    if plot==True:
+        plt.figure()
+        plt.plot(s0, azimuthal_average[0])
+        plt.title("Example of Azimuthally Averaged Data")
+    
+    return azimuthal_average
+
 
 def _azimuthal_average(center, image, normalize=True):
     """
@@ -1573,14 +1678,14 @@ def get_azimuthal_average_pool(data_array, center, normalize=False, plot=False):
     return average_data, std_data
 
 
-def normalize_to_baseline(image, min_val=50, max_val=100):  # todo add docstring and optimize
-    image[:, :25] = np.nan
-    data_mean = np.nanmean(image, axis=0)
+def normalize_to_baseline(data_array2d, min_val=50, max_val=100):  # todo add docstring and optimize
+    data_array2d[:, :25] = np.nan
+    data_mean = np.nanmean(data_array2d, axis=0)
     norm_factor = np.nansum(data_mean[min_val:max_val])
     data_norm = []
-    for i in range(len(image)):
-        offset = np.nansum(image[i, min_val:max_val])
-        norm = image[i] * (norm_factor / offset)
+    for i in range(len(data_array2d)):
+        offset = np.nansum(data_array2d[i, min_val:max_val])
+        norm = data_array2d[i] * (norm_factor / offset)
         data_norm.append(norm)
 
     data_norm = np.array(data_norm)
