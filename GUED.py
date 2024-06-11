@@ -1553,47 +1553,6 @@ def outlier_rev_algo(dat1d, correct_factor=3, fill_value = 'nan'):
         dat1d[index] = np.nanmean(dat1d)
     return dat1d
 
-def _get_azimuthal_average(dat, center):
-    xlength, rmat = preprocess_for_azimuthal_checking(dat, center)
-    res2d = np.copy(dat)
-    
-    mask_detect = True
-    for i in range(xlength):
-        roi = np.copy(dat[rmat==int(i+1)])
-        if len(roi)==0:
-            break
-        
-        if int(i+1)>=500:
-            break
-        # Check the area of mask so the azimuthal integration will ignore that.
-        if mask_detect==True:
-            if np.sum(np.isnan(roi)) < len(roi):
-                mask_detect=False
-                
-        if mask_detect==False:
-            # remove value that higher or lower than correct_factor*standard deviation
-            r_ave = np.nanmean(roi)
-            print(r_ave)
-
-
-def get_azimuthal_average(data_array, center, normalize=True, plot=False):
-    azimuthal_average = []
-    for i in range(len(data_array)):
-        s0, azi_ave, azi_std = _get_azimuthal_average(data_array[i], center)
-        azimuthal_average.append(azi_ave)
-        print(f"Completed azimuthal average for image {i}")
-    
-    azimuthal_average = np.array(azimuthal_average)
-    if normalize == True:
-        azimuthal_average = normalize_to_baseline(azimuthal_average)
-    
-    if plot==True:
-        plt.figure()
-        plt.plot(s0, azimuthal_average[0])
-        plt.title("Example of Azimuthally Averaged Data")
-    
-    return azimuthal_average
-
 
 def _azimuthal_average(center, image, normalize=True):
     """
