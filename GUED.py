@@ -425,7 +425,7 @@ def _sort_files(file_order, stage_positions):
 
 ### Cleaning Functions 
 
-def remove_counts(data_array, stage_positions, file_order, counts, std_factor=3, plot=False):
+def remove_counts(data_array, stage_positions, file_order, counts, added_range = [], std_factor=3, plot=False):
     # todo add edge option
     """
     Filters input parameters by removing any data where the total counts falls outside of the set filter. Default
@@ -469,7 +469,14 @@ def remove_counts(data_array, stage_positions, file_order, counts, std_factor=3,
     new_counts = counts[tc_good]
     new_file_order = file_order[tc_good]
 
-    print(init_length - len(tc_good), " number of files removed from ", init_length, " initial files")
+    for rng in added_range:
+        new_array = np.concatenate((new_array[:rng[0]], new_array[rng[1]:]))
+        print(len(new_array))
+        new_stage_positions = np.concatenate((new_stage_positions[:rng[0]], new_stage_positions[rng[1]:]))
+        new_counts = np.concatenate((new_counts[:rng[0]], new_counts[rng[1]:]))
+        new_file_order = np.concatenate((new_file_order[:rng[0]], new_file_order[rng[1]:]))
+
+    print(init_length - len(new_counts), " number of files removed from ", init_length, " initial files")
 
     if plot == True:
         plt.figure(figsize=(12, 4))  # Plot counts rate, images number at each posi, and bad images
