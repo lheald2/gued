@@ -1543,6 +1543,7 @@ def save_data(file_name, group_name, azimuthal_data, stage_positions, run_number
         # Check if the group exists, create it if not
         if group_name not in f:
             group = f.create_group(group_name)
+            print(f"Creating new group called {group_name}")
         else:
             group = f[group_name]
         
