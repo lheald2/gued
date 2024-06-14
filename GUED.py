@@ -386,7 +386,7 @@ def _sort_files(file_order, stage_positions):
 
 ### Cleaning Functions 
 
-def remove_counts(data_array, stage_positions, file_order, counts, added_range = [], std_factor=3, plot=False):
+def remove_counts(data_array, stage_positions, file_order, counts, added_range = [], std_factor=STD_FACTOR, plot=False):
     # todo add edge option
     """
     Filters input parameters by removing any data where the total counts falls outside of the set filter. Default
@@ -620,7 +620,7 @@ def remove_background_pool(data_array, remove_noise=True, plot=False):
     """
     clean_data = []
     backgrounds = []
-    with concurrent.futures.ProcessPoolExecutor() as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
         results = executor.map(_remove_background, data_array)
 
     for result in results:
@@ -664,7 +664,7 @@ def remove_background_pool(data_array, remove_noise=True, plot=False):
         return backgrounds
 
 
-def _remove_xrays(mean_data, std_data, image, std_factor=4):
+def _remove_xrays(mean_data, std_data, image, std_factor=STD_FACTOR):
     """This is the hidden function that is run within the remove_xrays_pool function.
 
     ARGUMENTS:
@@ -755,7 +755,7 @@ def remove_xrays(data_array, plot=True): # testing for timing
     return clean_data
 
 
-def remove_xrays_pool(data_array, plot=True, std_factor=4):
+def remove_xrays_pool(data_array, plot=True, std_factor=STD_FACTOR):
     """
     Filters out any pixels that are more than set threshold value based on the standard deviation of the
     average pixel value by running the hidden function _remove_xrays in parallel.
@@ -782,7 +782,7 @@ def remove_xrays_pool(data_array, plot=True, std_factor=4):
     mean_data = np.mean(data_array, axis=0)
     std_data = np.std(data_array, axis=0)
     print("Removing hot pixels from all data")
-    with concurrent.futures.ThreadPoolExecutor() as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
         futures = [executor.submit(partial(_remove_xrays, mean_data, std_data), data) for
                    data in data_array]
         results = [future.result() for future in futures]
@@ -1120,7 +1120,7 @@ def find_center_pool(data_array, plot=True, print_stats=True):
 
     center_x = []
     center_y = []
-    with concurrent.futures.ThreadPoolExecutor() as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
         results = executor.map(finding_center_alg, data_array)
 
     for result in results:
@@ -1159,8 +1159,6 @@ def find_center_pool(data_array, plot=True, print_stats=True):
     return center_x, center_y
 
 
-
-
 def _median_filter(image, kernel_size = 5):
     """
     Applies the scipy.ndimage.median_filter function to the image then returns the filtered image"""
@@ -1194,7 +1192,7 @@ def median_filter_pool(data_array, plot=True):
         filtered data array of the same size as the input array"""
     
     filtered_data = []
-    with concurrent.futures.ProcessPoolExecutor() as executor:
+    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
         results = executor.map(_median_filter, data_array)
         
     for result in results:
@@ -1234,7 +1232,7 @@ def preprocess_for_azimuthal_checking(center, dat):
     return xlength, rmat
 
 
-def cleaning_2d_data(center, dat, correct_factor=3):
+def cleaning_2d_data(center, dat, std_factor=STD_FACTOR):
     xlength, rmat = preprocess_for_azimuthal_checking(center, dat)
     res2d = np.copy(dat)
     
@@ -1252,14 +1250,14 @@ def cleaning_2d_data(center, dat, correct_factor=3):
                 
         if mask_detect==False:
             # remove value that higher or lower than correct_factor*standard deviation
-            roi = outlier_rev_algo(roi, correct_factor=correct_factor)
+            roi = outlier_rev_algo(roi, std_factor=std_factor)
         
         res2d[rmat==int(i+1)] = np.copy(roi)
     return res2d
 
 
-def outlier_rev_algo(dat1d, correct_factor=3, fill_value = 'nan'):
-    index = np.logical_or(dat1d>=np.nanmean(dat1d)+correct_factor*np.nanstd(dat1d), dat1d<=np.nanmean(dat1d)-correct_factor*np.nanstd(dat1d))
+def outlier_rev_algo(dat1d, std_factor=STD_FACTOR, fill_value = 'nan'):
+    index = np.logical_or(dat1d>=np.nanmean(dat1d)+std_factor*np.nanstd(dat1d), dat1d<=np.nanmean(dat1d)-std_factor*np.nanstd(dat1d))
     if fill_value == 'nan':
         dat1d[index] = np.nan
     elif fill_value == 'average':
@@ -1298,7 +1296,7 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
     if len(center) > 2:
         print("Using all center values ")
         print("Removing radial outliers from all data")
-        with concurrent.futures.ProcessPoolExecutor() as executor:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
             # Zip the arrays together and submit to the executor
             results = list(executor.map(lambda args: cleaning_2d_data(*args), zip(center, data_array)))
         for result in results:
@@ -1308,7 +1306,7 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
     elif len(center) == 2:
         print("Using average center")
         print("Removing radial outliers from all data")
-        with concurrent.futures.ProcessPoolExecutor() as executor:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
             futures = [executor.submit(partial(cleaning_2d_data, center), data) for data in data_array]
             results = [future.result() for future in futures]
 
@@ -1390,7 +1388,7 @@ def get_azimuthal_average_pool(data_array, center, normalize=False, plot=False):
     if len(center) > 2:
         print("Using all center values ")
         print("Calculating azimuthal average for all data")
-        with concurrent.futures.ProcessPoolExecutor() as executor:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
             # Zip the arrays together and submit to the executor
             results = list(executor.map(lambda args: _azimuthal_average(*args), zip(data_array, center)))
         for result in results:
@@ -1401,7 +1399,7 @@ def get_azimuthal_average_pool(data_array, center, normalize=False, plot=False):
     elif len(center) == 2:
         print("Using average center")
         print("Calculating azimuthal average for all data")
-        with concurrent.futures.ProcessPoolExecutor() as executor:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
             futures = [executor.submit(partial(_azimuthal_average, center), data) for data in data_array]
             results = [future.result() for future in futures]
 
