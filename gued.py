@@ -1227,6 +1227,7 @@ def fit_circle(fit_points, printr2='yes'):
 
     return center_new, r_new
 
+
 def _median_filter(image, kernel_size = 5):
     """
     Applies the scipy.ndimage.median_filter function to the image then returns the filtered image"""
@@ -1562,6 +1563,30 @@ def save_data(file_name, group_name, azimuthal_data, stage_positions, run_number
     print(f"Run {run_number} data saved successfully.")
     return
 
+
+def read_individual_run(file_name, group_name, run_number):
+    with h5py.File(file_name, 'r') as f:
+        group = f[group_name]
+        
+        # Create unique dataset names for each run
+        dataset_name_var1 = f'I_run_{run_number}'
+        dataset_name_var2 = f'stage_positions_run_{run_number}'
+        
+        if dataset_name_var1 not in group or dataset_name_var2 not in group:
+            print(f"Error: Run {run_number} data not found in group '{group_name}'.")
+            return None, None
+        
+        # Load data for var1 and var2
+        I_data = group[dataset_name_var1][:]
+        stage_data = group[dataset_name_var2][:]
+        
+        # Optionally, print attributes
+        attr_var1 = group[dataset_name_var1].attrs.get('description', 'No description')
+        attr_var2 = group[dataset_name_var2].attrs.get('description', 'No description')
+        print(f"Attributes for var1_run_{run_number}: {attr_var1}")
+        print(f"Attributes for var2_run_{run_number}: {attr_var2}")
+        
+    return I_data, stage_data
 
 def read_combined_data(file_name, group_name):
     with h5py.File(file_name, 'r') as f:
