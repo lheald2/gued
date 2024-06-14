@@ -1367,6 +1367,51 @@ def get_average(array):
     return average, stdev
 
 
+def _get_azimuthal_average(dat, center, plot=False):
+
+    xlength, rmat = gued.preprocess_for_azimuthal_checking(dat, center)
+    azimuthal_average = []
+    mask_detect = True
+    for i in range(xlength):
+        roi=np.copy(dat[rmat==int(i+1)])
+        if len(roi)==0:
+            break
+        if int(i+1)>=500:
+            break
+
+        if mask_detect==True:
+            if np.sum(np.isnan(roi)) < len(roi):
+                mask_detect=False
+        r_ave = np.nanmean(roi)
+        azimuthal_average.append(r_ave)
+    azimuthal_average = np.array(azimuthal_average)
+
+    if plot==True:
+        plt.figure()
+        plt.plot(azimuthal_average)
+        plt.show()
+
+    return azimuthal_average
+
+def get_azimuthal_average(data_array, center, normalize=True, plot=False):
+    azimuthal_average = []
+    for i in range(len(data_array)):
+        azi_ave = _get_azimuthal_average(data_array[i], center)
+        azimuthal_average.append(azi_ave)
+        print(f"Completed azimuthal average for image {i}")
+    
+    azimuthal_average = np.array(azimuthal_average)
+    if normalize == True:
+        azimuthal_average = gued.normalize_to_baseline(azimuthal_average)
+    
+    if plot==True:
+        plt.figure()
+        plt.plot(azimuthal_average[0])
+        plt.title("Example of Azimuthally Averaged Data")
+    
+    return azimuthal_average
+
+
 def get_radial_distribution(image):
     """Get average radial intensity after eliminating outliers"""
     radial_range = int(max(X_CENTER, Y_CENTER, GRID_SIZE - X_CENTER,
