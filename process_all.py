@@ -31,18 +31,19 @@ def get_azimuthal_average(data,x,y):
     return np.array(I)
 
 if __name__ == '__main__':
-    dataPath = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\Run\\'
-    runPath = "\\*\\*\\*\\ANDOR1_*.tif"
+    data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\Run\\'
+    data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180623\\Run\\'
+    run_path = "*\\*\\ANDOR1_*.tif"
 
 
     bkg_path = '/work/centurion/shared/UED_data/FY18_o-nitrophenol/20180823/Background/*/*/ANDOR1_*.tif'
 
 
-    newPath = dataPath + runPath
-    print(newPath)
+    full_path = data_path + run_path
+    print(full_path)
     print(bkg_path)
 
-    files = glob.glob(newPath) 
+    files = glob.glob(full_path) 
     bkg_files = glob.glob(bkg_path)
     print(len(files))
     print(len(bkg_files))
@@ -55,9 +56,10 @@ if __name__ == '__main__':
 
     file_name = f"{exp_label}_{today}.h5"
     print(file_name)
-    group_name = "s1"
+    group_name = "s4"
 
-    data_sets = [[0, 225], [275, 400], [400,600], [600, 800], [800, 1000], [1000,1200], [1200,1400], [1400,1600], [1600, 1800], [1800,1990]]
+    #data_sets = [[0, 225], [275, 400], [400,600], [600, 800], [800, 1000], [1000,1200], [1200,1400], [1400,1600], [1600, 1800], [1800,1990]]
+    data_sets = [[0,200], [200, 400], [400,600], [600, 800], [800, 1000], [1000,1200], [1200, 1400], [1400, 1600], [1600, 1800], [1800, 2000]]
 
     start = time.perf_counter()
 
@@ -87,7 +89,7 @@ if __name__ == '__main__':
         masked_data = gued.apply_mask(data_array, plot=False)
 
         print(f"Removing Radial Outliers for files {data_sets[i][0]} to {data_sets[i][1]}")
-        center = [489, 464]
+        center = [560, 500]
         cleaned_data = []
         cleaned_data = gued.remove_radial_outliers_pool(masked_data, center, plot=False)
 

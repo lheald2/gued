@@ -18,7 +18,7 @@ from datetime import date
 #Authors: Lauren F. Heald, Keke Chen
 #Contact: lheald2@unl.edu, ckk20@mails.tsinghua.edu.cn
 
-path_dcs= 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\Coding Lab Notebook\\GUED_Analysis\\packages\\dcs_repositiory\\3.7MeV\\'
+path_dcs= 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\Coding Lab Notebook\\gued_package\\GUED_Analysis\\packages\\dcs_repositiory\\3.7MeV\\'
 #path_dcs = '/sdf/home/l/lheald2/GUED/jupyter_notebook/user_notebooks/dcs_repository/3.7MeV/'
 table=pd.read_csv(path_dcs+'Periodic_Table.csv')
 
