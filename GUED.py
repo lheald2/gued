@@ -9,6 +9,8 @@ import pandas as pd
 import scipy.signal as ss
 import concurrent.futures
 from functools import partial
+import h5py
+import os
 
 # Image stuff
 import matplotlib.patches as patches
@@ -93,8 +95,7 @@ def _get_counts(data_array, plot=False):
     return counts
 
 
-def get_image_details(file_names, sort=True, plot=False,
-                      filter_data=False):  # looks pretty good for now todo look into optional arguments
+def get_image_details(file_names, sort=True, filter_data=False, plot=False):
     """
     Reads all images from input file_names and returns the data as a 3d array along with stage positions, order, and counts per image.
 
@@ -113,6 +114,12 @@ def get_image_details(file_names, sort=True, plot=False,
         default is set to False. When True, code prompts you for a minimum and maximum value then
         returns only the information from files within this range
 
+    GLOBAL VARIABLES:
+
+    SEPARATORS (list):
+        list of strings such as '_' or '-' which are used in the file naming scheme to separate values needed for data analysis (i.e. stage
+        position)
+
     RETURNS:
 
     data_array (3d array): 
@@ -127,28 +134,48 @@ def get_image_details(file_names, sort=True, plot=False,
 
     """
     data_array = tf.imread(file_names)  # construct array containing files
-
-    try:
-        stage_pos = []
-        file_order = []
+    if len(SEPARATORS) == 2:
         try:
-            # stage_pos = [np.float64(file_name[idx_start:idx_end]) for file_name in file_names]
-            # stage_pos = np.array(stage_pos)
-            for file in file_names:
-                string = list(
-                    map(str, file.split("\\")))  # Note standard slash usage for windows todo might need to test
-                folder_number = string[-3][-3:]
-                string = list(map(str, string[-1].split("-")))
-                file_number = int(folder_number + string[1])
-                file_order.append(int(file_number))
-                string = list(map(str, string[-1].split("_")))
-                stage_pos.append(float(string[0]))
-        except ValueError:
-            raise ValueError("""Failed to convert a file name to a float. Make sure that index positions are correct for all files in file_names. 
-            Also check separators""")
-    except IndexError:
-        raise ValueError(
-            "Invalid index values. Make sure the index values are within the range of the file name strings.")
+            stage_pos = []
+            file_order = []
+            try:
+                # stage_pos = [np.float64(file_name[idx_start:idx_end]) for file_name in file_names]
+                # stage_pos = np.array(stage_pos)
+                for file in file_names:
+                    string = list(
+                        map(str, file.split("\\")))  # Note standard slash usage for windows todo might need to test
+                    folder_number = string[-3][-3:]
+                    string = list(map(str, string[-1].split(SEPARATORS[0])))
+                    file_number = int(folder_number + string[1])
+                    file_order.append(int(file_number))
+                    string = list(map(str, string[-1].split(SEPARATORS[1])))
+                    stage_pos.append(float(string[0]))
+            except ValueError:
+                raise ValueError("""Failed to convert a file name to a float. Make sure that index positions are correct for all files in file_names. 
+                Also check separators""")
+        except IndexError:
+            raise ValueError(
+                "Invalid index values. Make sure the index values are within the range of the file name strings.")
+    elif len(SEPARATORS) == 1:
+        try:
+            stage_pos = []
+            file_order = []
+            try:
+                # stage_pos = [np.float64(file_name[idx_start:idx_end]) for file_name in file_names]
+                # stage_pos = np.array(stage_pos)
+                for file in file_names:
+                    string = list(map(str, file.split("/")))
+                    string = list(map(str, string[-1].split(SEPARATORS)))
+                    file_order.append(int(string[2]))
+                    stage_pos.append(float(string[3]))
+            except ValueError:
+                raise ValueError(
+                    """Failed to convert a file name to a float. Make sure that index positions are correct for all files in file_names. Also check separators""")
+        except IndexError:
+            raise ValueError(
+                "Invalid index values. Make sure the index values are within the range of the file name strings.")
+    else:
+        print("Provide valid SEPARATORS")
 
     stage_pos = np.array(stage_pos)
     file_order = np.array(file_order)
@@ -198,72 +225,6 @@ def get_image_details(file_names, sort=True, plot=False,
         plt.show()
 
         _show_counts(stage_pos, counts)
-
-    return data_array, stage_pos, file_order, counts
-
-
-def get_image_details_slac(file_names, sort=True):  # todo update to look like others
-    """
-    Reads all images from input file_names and returns the data as a 3d array along with stage positions, order, and counts per image.
-
-    ARGUMENTS:
-
-    file_names (list):
-        list of file names to be read in
-
-    OPTIONAL ARGUMENTS:
-
-    sort (boolean): 
-        default is set to True. This arguments sorts the data based on when it was saved (i.e. file number)
-    plot (boolean): 
-        default is set to False. When True, a plot of the data, log(data), and histogram of counts is shown
-    filter_data (boolean): 
-        default is set to False. When True, code prompts you for a minimum and maximum value then
-        returns only the information from files within this range
-
-    RETURNS:
-
-    data_array (3d array): 
-        Array of N x 1024 x 1024 where N is the length of tile file_names list. Generated by using tifffile as tf.
-    stage_positions (array): 
-        An array containing the stage positions of the file. The index of each stage position corresponds to the index of the file name 
-        in file_names.
-    file_order (array): 
-        Returns the image number located in the file name. Reflects the order with which the images are taken.
-    counts(array): 
-        One dimensional numpy array of length N containing the data after summing over each array element.
-
-    """
-    data_array = tf.imread(file_names)  # construct array containing files
-
-    try:
-        stage_pos = []
-        file_order = []
-        try:
-            # stage_pos = [np.float64(file_name[idx_start:idx_end]) for file_name in file_names]
-            # stage_pos = np.array(stage_pos)
-            for file in file_names:
-                string = list(map(str, file.split("/")))
-                string = list(map(str, string[-1].split("_")))
-                file_order.append(int(string[2]))
-                stage_pos.append(float(string[3]))
-        except ValueError:
-            raise ValueError(
-                """Failed to convert a file name to a float. Make sure that index positions are correct for all files in file_names. Also check separators""")
-    except IndexError:
-        raise ValueError(
-            "Invalid index values. Make sure the index values are within the range of the file name strings.")
-
-    stage_pos = np.array(stage_pos)
-    file_order = np.array(file_order)
-    counts = _get_counts(data_array)
-
-    if sort == True:
-        idx_sort = np.argsort(file_order)
-        file_order = file_order[idx_sort]
-        data_array = data_array[idx_sort]
-        stage_pos = stage_pos[idx_sort]
-        counts = counts[idx_sort]
 
     return data_array, stage_pos, file_order, counts
 
@@ -1198,6 +1159,8 @@ def find_center_pool(data_array, plot=True, print_stats=True):
     return center_x, center_y
 
 
+
+
 def _median_filter(image, kernel_size = 5):
     """
     Applies the scipy.ndimage.median_filter function to the image then returns the filtered image"""
@@ -1230,7 +1193,6 @@ def median_filter_pool(data_array, plot=True):
     filtered_data (3d array):
         filtered data array of the same size as the input array"""
     
-    print('Cleaning all data with concurrent.futures.ProcessPoolExecutor')
     filtered_data = []
     with concurrent.futures.ProcessPoolExecutor() as executor:
         results = executor.map(_median_filter, data_array)
@@ -1239,8 +1201,6 @@ def median_filter_pool(data_array, plot=True):
         filtered_data.append(result)
     
     filtered_data = np.array(filtered_data)
-    print(filtered_data.shape)
-    print("Finished cleaning!!")
 
     if plot == True:
         plt.figure()
@@ -1256,174 +1216,55 @@ def median_filter_pool(data_array, plot=True):
     return filtered_data
 
 ### Azimuthal Averaging and Radial Outlier Removal Functions
-def _preprocess_radial_data(center, image, plot=False):
-    """
-    Takes a single 2d array and converts to polar coordinates based on the supplied center value. Then calculates
-    the average and standard deviation at each radial distance. Returns the azimuthal average and standard deviation
-    as well as the image in polar coordinates.
-
-    ARUGMENTS:
-
-    image (2d array): 
-        individual image from the larger data set
-    center (list with length 2): 
-        center x and center y values #todo fix how it handles the center
-
-    RETURNS:
-
-    azi_ave (1d array): 
-        average values for each radius
-    azi_std (1d array): 
-        standard deviation for each radius
-    polar_image (2d array): 
-        original image converted to polar coordinates
-
-        """
-
-    from scipy.interpolate import griddata
-
-    # Create meshgrid of coordinates
-    x, y = np.indices(image.shape[:2])
-
-    # Convert coordinates to polar coordinates
-    theta = np.arctan2(y - center[1], x - center[0])
-    rho = np.sqrt((x - center[0]) ** 2 + (y - center[1]) ** 2)
-
-    # Normalize rho to [0, max_radius] for image indexing
-    max_radius = np.sqrt(center[0] ** 2 + center[1] ** 2)
-    # max_radius = len(image[0]) - min(center)
-
-    rho_normalized = (rho / max_radius) * (image.shape[0] / 2)
-
-    # Convert theta to degrees and ensure it's within [0, 360]
-    theta_degrees = np.degrees(theta) % 360
-
-    # Create polar image with correct dimensions
-    polar_image = np.empty((int(max_radius), 360))
-    polar_image.fill(np.nan)
-
-    # Fill in the polar image with values from the original image
-    for i in range(image.shape[0]):
-        for j in range(image.shape[1]):
-            polar_image[int(rho_normalized[i, j]), int(theta_degrees[i, j])] = image[i, j]
-
-    azi_ave = np.nanmean(polar_image, axis=1)
-    azi_std = np.nanstd(polar_image, axis=1)
-
-    # Create the Cartesian coordinate grid
-    dimension = len(image)
-    radius = np.arange(0, len(azi_ave))
-    x = np.arange(dimension) - center[0]
-    y = np.arange(dimension) - center[1]
-    X, Y = np.meshgrid(x, y)
-
-    # Convert Cartesian coordinates to polar coordinates
-    R = np.sqrt(X ** 2 + Y ** 2)
-    Theta = np.arctan2(Y, X)
-
-    # Normalize R to match the radius array
-    # Define the full polar grid
-    theta_full = np.linspace(-np.pi, np.pi, dimension)
-    radius_full, theta_full = np.meshgrid(radius, theta_full)
-
-    # Flatten the polar grid arrays for interpolation
-    radius_flat = radius_full.flatten()
-    theta_flat = theta_full.flatten()
-
-    # Expand polar data to match the full grid shape
-    polar_data_ave = np.tile(azi_ave, (theta_full.shape[0], 1)).flatten()
-    polar_data_std = np.tile(azi_std, (theta_full.shape[0], 1)).flatten()
-
-    # Interpolate the polar data to the Cartesian grid
-    remapped_data = griddata((radius_flat, theta_flat), polar_data_ave,
-                             (R.flatten(), Theta.flatten()), method='linear')
-    remapped_std = griddata((radius_flat, theta_flat), polar_data_std,
-                            (R.flatten(), Theta.flatten()), method='linear')
-
-    # Reshape the interpolated data to the Cartesian grid dimensions
-    remapped_data = remapped_data.reshape(dimension, dimension)
-    remapped_std = remapped_std.reshape(dimension, dimension)
-
-    # Plot the Cartesian image
-    if plot == True:
-        plt.imshow(remapped_data, origin='lower', extent=(-center[0], center[0], -center[1], center[1]))
-        plt.colorbar()
-        plt.title('Cartesian Image from Polar Data')
-        plt.show()
-
-    return remapped_data, remapped_std
+# todo: clean and optimize
+def cart2pol(x, y): 
+    r = np.sqrt(x**2 + y**2)
+    theta = np.arctan2(y, x)
+    return r, theta
 
 
-def remove_radial_outliers(center, image, fill_value='nan', std_factor=5, plot=False, print_summary=False):
-    """
-    Takes a single 2d image and identifies instances where the pixel value at any radius is an outlier. The bad pixel
-    is then replaced with either np.nan or the interpolated average value.
-
-    ARGUMENTS:
-
-    image (2d array): 
-        single image
-    center (list): 
-        center x value and center y value *NOTE: if center value is bad, percentage of pixels removed will be larger
-
-    OPTIONAL ARGUMENTS:
-
-    plot (boolean): 
-        Default set to False. When true, plots the input image and the cleaned image.
-    fill_value (string of either 'nan' or 'ave'): 
-        Default set to 'nan'. defines whether bad pixels are replaced by np.nan or average
-    std_factor (int): 
-        Default set to 3. Defines standard deviation threshold for removing bad instances
-
-    RETURNS:
-
-    clean_image (2d array): 
-        image with outliers removed
-    idx_outliers (list): 
-        coordinates for outlier pixels
-
-        """
+def preprocess_for_azimuthal_checking(center, dat):
+    w, h = dat.shape
+    xmat, ymat = np.meshgrid(np.arange(0,w,1)-center[0],np.arange(0,h,1)-center[1])
+    rmat, _ = cart2pol(xmat, ymat)
+    rmat = np.around(rmat)
+    dat = dat.astype(float)
+    xlength = int(np.amax([np.amax(abs(xmat)),np.amax(abs(ymat))]))
     
-    image = np.array(image)
+    return xlength, rmat
 
-    clean_image = np.copy(image)
-    ave_image, std_image = _preprocess_radial_data(center, image)
-    bad_idx = np.logical_or(image >= ave_image + std_factor * std_image, image <= ave_image - std_factor * std_image)
-    pct_removed = np.sum(bad_idx) / (len(image) * len(image)) * 100
-    #print(f"{pct_removed}% of pixels were removed.")
 
+def cleaning_2d_data(center, dat, correct_factor=3):
+    xlength, rmat = preprocess_for_azimuthal_checking(center, dat)
+    res2d = np.copy(dat)
+    
+    mask_detect = True
+    for i in range(xlength):
+        roi = np.copy(dat[rmat==int(i+1)])
+        if len(roi)==0:
+            break
+        if int(i+1)>=500:
+            break
+        # Check the area of mask so the azimuthal integration will ignore that.
+        if mask_detect==True:
+            if np.sum(np.isnan(roi)) < len(roi):
+                mask_detect=False
+                
+        if mask_detect==False:
+            # remove value that higher or lower than correct_factor*standard deviation
+            roi = outlier_rev_algo(roi, correct_factor=correct_factor)
+        
+        res2d[rmat==int(i+1)] = np.copy(roi)
+    return res2d
+
+
+def outlier_rev_algo(dat1d, correct_factor=3, fill_value = 'nan'):
+    index = np.logical_or(dat1d>=np.nanmean(dat1d)+correct_factor*np.nanstd(dat1d), dat1d<=np.nanmean(dat1d)-correct_factor*np.nanstd(dat1d))
     if fill_value == 'nan':
-        clean_image[bad_idx] = np.nan
-    elif fill_value == 'ave':
-        clean_image[bad_idx] = ave_image[bad_idx]
-
-    if plot == True:
-        plt.figure()
-        plt.subplot(1, 3, 1)
-        plt.imshow(image)
-        plt.xlim(300, 600)
-        plt.ylim(300, 600)
-        plt.title("Original Image")
-
-        plt.subplot(1, 3, 2)
-        plt.imshow(ave_image)
-        plt.xlim(300, 600)
-        plt.ylim(300, 600)
-        plt.title("Average Image")
-
-        plt.subplot(1, 3, 3)
-        plt.imshow(clean_image)
-        plt.xlim(300, 600)
-        plt.ylim(300, 600)
-        plt.title("Cleaned Image")
-
-        plt.tight_layout()
-        plt.show()
-
-    if print_summary == True:
-        print(f"{pct_removed}% of pixels were removed for this image")
-
-    return clean_image, bad_idx, pct_removed, ave_image
+        dat1d[index] = np.nan
+    elif fill_value == 'average':
+        dat1d[index] = np.nanmean(dat1d)
+    return dat1d
 
 
 def remove_radial_outliers_pool(data_array, center, plot=False):
@@ -1452,38 +1293,33 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
     """
 
     clean_data = []
-    bad_idx = []
-    average_data = []
-    pct_removed = []
+    rmv_count = []
 
     if len(center) > 2:
         print("Using all center values ")
         print("Removing radial outliers from all data")
         with concurrent.futures.ProcessPoolExecutor() as executor:
             # Zip the arrays together and submit to the executor
-            results = list(executor.map(lambda args: remove_radial_outliers(*args), zip(data_array, center)))
+            results = list(executor.map(lambda args: cleaning_2d_data(*args), zip(center, data_array)))
         for result in results:
-            data, idx, pct, ave = result
-            clean_data.append(data)
-            bad_idx.append(idx)
-            pct_removed.append(pct)
-            average_data.append(ave)
+            clean_image = result
+            clean_data.append(clean_image)
 
     elif len(center) == 2:
         print("Using average center")
         print("Removing radial outliers from all data")
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            futures = [executor.submit(partial(remove_radial_outliers, center), data) for data in data_array]
+            futures = [executor.submit(partial(cleaning_2d_data, center), data) for data in data_array]
             results = [future.result() for future in futures]
 
         for result in results:
-            data, idx, pct, ave = result
-            clean_data.append(data)
-            bad_idx.append(idx)
-            pct_removed.append(pct)
-            average_data.append(ave)
+            clean_image = result
+            clean_data.append(clean_image)
+            rmv = np.isnan(clean_image)
+            rmv_count.append(np.sum(rmv)/(1024*1024))
 
-
+    clean_data = np.array(clean_data)
+    rmv_count = np.array(rmv_count)
 
     if plot == True:
         plt.figure()
@@ -1494,71 +1330,18 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
         plt.title("Original Image")
 
         plt.subplot(1, 3, 2)
-        plt.imshow(average_data[0])
-        # plt.xlim(300, 600)
-        # plt.ylim(300, 600)
-        plt.title("Average Image")
-
-        plt.subplot(1, 3, 3)
         plt.imshow(clean_data[0])
         # plt.xlim(300, 600)
         # plt.ylim(300, 600)
         plt.title("Cleaned Image")
 
+        plt.subplot(1, 3, 3)
+        plt.plot(rmv_count)
+        plt.title("Percent of nan Values per Image")
         plt.tight_layout()
         plt.show()
-    
-    print(f"{pct_removed[0]}% removed")
 
     return clean_data
-
-# todo: clean and optimize
-def cart2pol(x, y): 
-    r = np.sqrt(x**2 + y**2)
-    theta = np.arctan2(y, x)
-    return r, theta
-
-def preprocess_for_azimuthal_checking(dat, center):
-    w, h = dat.shape
-    xmat, ymat = np.meshgrid(np.arange(0,w,1)-center[0],np.arange(0,h,1)-center[1])
-    rmat, _ = cart2pol(xmat, ymat)
-    rmat = np.around(rmat)
-    dat = dat.astype(float)
-    xlength = int(np.amax([np.amax(abs(xmat)),np.amax(abs(ymat))]))
-    
-    return xlength, rmat
-
-def cleaning_2d_data(dat, center, correct_factor=3):
-    xlength, rmat = preprocess_for_azimuthal_checking(dat, center)
-    res2d = np.copy(dat)
-    
-    mask_detect = True
-    for i in range(xlength):
-        roi = np.copy(dat[rmat==int(i+1)])
-        if len(roi)==0:
-            break
-        if int(i+1)>=500:
-            break
-        # Check the area of mask so the azimuthal integration will ignore that.
-        if mask_detect==True:
-            if np.sum(np.isnan(roi)) < len(roi):
-                mask_detect=False
-                
-        if mask_detect==False:
-            # remove value that higher or lower than correct_factor*standard deviation
-            roi = outlier_rev_algo(roi, correct_factor=correct_factor)
-        
-        res2d[rmat==int(i+1)] = np.copy(roi)
-    return res2d
-
-# high standard deviation checking and removing
-def outlier_rev_algo(dat1d, correct_factor=3, fill_value = 'nan'):
-    index = np.logical_or(dat1d>=np.nanmean(dat1d)+correct_factor*np.nanstd(dat1d), dat1d<=np.nanmean(dat1d)-correct_factor*np.nanstd(dat1d))
-    if fill_value == 'nan':
-        dat1d[index] = np.nan
-    elif fill_value == 'average':
-        dat1d[index] = np.nanmean(dat1d)
-    return dat1d
 
 
 def _azimuthal_average(center, image, normalize=True):
@@ -1685,5 +1468,51 @@ def power_fit(data_array, x_vals, return_baseline=False):
     else:
         return corrected_data
 
-### PDF Generating Functions
-# todo add theses functions
+
+# Saving and Loading Data
+
+def save_data(file_name, group_name, azimuthal_data, stage_positions, run_number):
+    # Open the HDF5 file in append mode
+    with h5py.File(file_name, 'a') as f:
+        # Check if the group exists, create it if not
+        if group_name not in f:
+            group = f.create_group(group_name)
+        else:
+            group = f[group_name]
+        
+        # Create unique dataset names for each run
+        dataset_name_var1 = f'I_run_{run_number}'
+        dataset_name_var2 = f'stage_positions_run_{run_number}'
+        
+        # Save the datasets
+        group.create_dataset(dataset_name_var1, data=azimuthal_data)
+        group.create_dataset(dataset_name_var2, data=stage_positions)
+        
+        # Optionally, add attributes to each dataset
+        group[dataset_name_var1].attrs['description'] = f'Azimuthal averaged data from run {run_number}'
+        group[dataset_name_var2].attrs['description'] = f'Stage positions from run {run_number}'
+
+    print(f"Run {run_number} data saved successfully.")
+    return
+
+
+def read_combined_data(file_name, group_name):
+    with h5py.File(file_name, 'r') as f:
+        group = f[group_name]
+        
+        # Collect all datasets for var1 and var2
+        I_data_list = []
+        stage_data_list = []
+        
+        for dataset_name in group.keys():
+            if 'I' in dataset_name:
+                I_data_list.append(group[dataset_name][:])
+            elif 'stage' in dataset_name:
+                stage_data_list.append(group[dataset_name][:])
+        
+        # Combine data for var1 and var2
+        combined_I_data = np.concatenate(I_data_list)
+        combined_stage_data = np.concatenate(stage_data_list)
+        
+    return combined_I_data, combined_stage_data
+
