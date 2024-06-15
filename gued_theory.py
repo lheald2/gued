@@ -14,13 +14,13 @@ from matplotlib.colors import TwoSlopeNorm
 from scipy.ndimage import gaussian_filter1d
 warnings.simplefilter("ignore")
 from datetime import date
+from gued_globals import *
 
 #Authors: Lauren F. Heald, Keke Chen
 #Contact: lheald2@unl.edu, ckk20@mails.tsinghua.edu.cn
 
-path_dcs= 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\Coding Lab Notebook\\gued_package\\GUED_Analysis\\packages\\dcs_repositiory\\3.7MeV\\'
-#path_dcs = '/sdf/home/l/lheald2/GUED/jupyter_notebook/user_notebooks/dcs_repository/3.7MeV/'
-table=pd.read_csv(path_dcs+'Periodic_Table.csv')
+TABLE = pd.read_csv(PATH_DCS+'Periodic_Table.csv')
+
 
 def import_s():
     """ This functions uses the C.dat files as an example file to generate values of s for the simulation calculations. 
@@ -100,7 +100,7 @@ def sym_to_no(atom_symbol):
         atomic number
     """
     
-    n=np.where(table['Symbol']==atom_symbol)
+    n=np.where(TABLE['Symbol']==atom_symbol)
     atom_number = int(n[0]+1)
     return atom_number
 
@@ -118,7 +118,7 @@ def no_to_sym(atom_number):
         atomic symbol    
     """
     
-    atom_symbol = table['Symbol'][atom_number-1]
+    atom_symbol = TABLE['Symbol'][atom_number-1]
     return atom_symbol
 
 
@@ -166,7 +166,7 @@ def load_static_mol_coor(path_mol, mol_name, file_type):
     
     filename=path_mol + mol_name + file_type
     if file_type=='.xyz':
-        [coor_xyz,atom_sum]=load_xyz_new(filename)
+        [coor_xyz,atom_sum]=load_xyz(filename)
         coor=get_modified_coor_for_xyz(coor_xyz,atom_sum)
         
     if file_type=='.csv':
@@ -183,7 +183,7 @@ def load_static_mol_coor(path_mol, mol_name, file_type):
     return coor,atom_sum
 
 
-def load_xyz_new(xyz_file):
+def load_xyz(xyz_file):
     """
     Reads in an .xyz generated from programs such as Gaussian or ORCA.
     
@@ -219,17 +219,24 @@ def load_xyz_new(xyz_file):
     
 
 def get_modified_coor_for_xyz(re,atom_sum):
-    """ Appends a column of atomic numbers to the coordinate array read from the .xyz file
+    """ 
+    Appends a column of atomic numbers to the coordinate array read from the .xyz file
     
     ARGUMENTS: 
-    re (array) = coordinate array of N (# of atoms) x 4 shape with column 0 containing atomic symbol, and columns 1, 2, and 3 containing x, y, z 
+
+    re (array):
+        coordinate array of N (# of atoms) x 4 shape with column 0 containing atomic symbol, and columns 1, 2, and 3 containing x, y, z 
         coordinates
-    atom_sum (int) = total number of atoms in the molecule
+    atom_sum (int):
+        total number of atoms in the molecule
     
     RETURNS: 
-    coor (array) = N x 5 array where N = # of atoms. Column 0 contains the atomic symbol, columns 1, 2, and 3 contain x, y, and z coordinates
+
+    coor (array): 
+        N x 5 array where N = # of atoms. Column 0 contains the atomic symbol, columns 1, 2, and 3 contain x, y, and z coordinates
         and column 4 contains the atomic number. 
     """
+
     atom_num=[0 for i in range(atom_sum)]
     for i in range(atom_sum):
         atom_num[i]=sym_to_no(re[i][0])
@@ -242,15 +249,21 @@ def get_modified_coor_for_xyz(re,atom_sum):
 
 
 def get_modified_coor_for_csv(coor_csv,atom_sum):
-    """ Appends a column of atomic numbers to the coordinate array read from the .csv file
+    """ 
+    Appends a column of atomic numbers to the coordinate array read from the .csv file
     
     ARGUMENTS: 
-    coor_csv (array) = coordinate array of N (# of atoms) x 4 shape with column 0 containing atomic symbol, and columns 1, 2, and 3 containing x,
+
+    coor_csv (array):
+        coordinate array of N (# of atoms) x 4 shape with column 0 containing atomic symbol, and columns 1, 2, and 3 containing x,
         y, and z coordinates
-    atom_sum (int) = total number of atoms in the molecule
+    atom_sum (int):
+        total number of atoms in the molecule
     
     RETURNS: 
-    coor (array) = N x 5 array where N = # of atoms. Column 0 contains the atomic symbol, columns 1, 2, and 3 contain x, y, and z coordinates
+
+    coor (array):
+        N x 5 array where N = # of atoms. Column 0 contains the atomic symbol, columns 1, 2, and 3 contain x, y, and z coordinates
         and column 4 contains the atomic number. 
     """
 
@@ -394,52 +407,32 @@ def get_I_from_xyz(f, s000, s_max, coor, atom_sum):
     return I, I_at, I_mol, s_new
 
 
-def get_I_from_mol_coor(f, s, s_max, coor, atom_sum):  # f is the form factor array
-    # this function is to get scattering intensity from molecular coordinates and atom form factors
-    b = range(atom_sum)
-
-    Lm = 125  # Lm confines the maximum of s, for we negelect high angle scattering which has poor signal-noice ratio.
-    # You may change this number in order to compute at higher s
-    # this Lm should be no larger than 138
-    s0 = s[0:Lm] * 1e-10  # this is to change the unit into inverse angstrom
-    s1 = np.linspace(0, s_max, 500)
-
-    I = np.zeros(Lm)  # total elastic scattering intensity under the approx of IAM
-    I_at = np.zeros(Lm)  # I_atom under IAM
-    I_mol = np.zeros(Lm)  # I_molecule under IAM
-    R = [0 for i in range(atom_sum ** 2)]
-    m = 0
-    for i in range(atom_sum):  # the case for single atom scattering, which contributes to I_at
-        I_at += np.abs(f[int(coor[i, 4]), 0:Lm]) ** 2
-
-    for i in b:
-        for j in b:
-            if i != j:  # the case for interatomic interferencing, which contributes to I_mol
-                r_ij = ((float(coor[i, 1]) - float(coor[j, 1])) ** 2 + (float(coor[i, 2]) - float(coor[j, 2])) ** 2 + (
-                            float(coor[i, 3]) - float(coor[j, 3])) ** 2) ** 0.5 * 1e-10
-                # if int(coor[i,4])!=1 and int(coor[j,4])!=1:
-                #   R[m]=r_ij
-                #  m+=1
-                # distance between atom i and j
-                I_mol[0] += f[int(coor[i, 4]), 0] * f[int(coor[j, 4]), 0]
-                I_mol[1:Lm] += f[int(coor[i, 4]), 1:Lm] * f[int(coor[j, 4]), 1:Lm] * np.sin(s[1:Lm] * r_ij) / s[
-                                                                                                              1:Lm] / r_ij
-    # y=[1 for i in range(len(R))]
-    # y=np.array(y)
-    # plt.scatter(np.array(R)*1e12,y,s=5)
-    # plt.grid()
-    # plt.show()
-
-    I = I_at + I_mol
-
-    I1 = make_interp_spline(s0, I)(s1)
-    I_at1 = make_interp_spline(s0, I_at)(s1)
-    I_mol1 = make_interp_spline(s0, I_mol)(s1)
-
-    return I1, I_at1, I_mol1, s1
-
-
 def get_I_for_exp_from_mol_coor(f, s, s_exp, coor, atom_sum):
+    """
+    ARGUMENTS: 
+
+    f (ndarray):
+        form factors for all atoms
+    s (1d array):
+        s values read from the import_dcs function
+    s_exp (1d array):
+        s values corresponding to the experimental data
+    coor (ndarray):
+        coordinates for the molecule of interest
+    atom_sum (int):
+        total number of atoms in molecule
+
+    RETURNS:
+
+    I1 (1d array): 
+        total scattering intensity (I atomic + I molecular)
+    I_at1 (1d array): 
+        atomic scattering intensity
+    I_mol1 (1d array):
+        molecular scattering intensity
+    """
+
+    #todo rewrite with proper interpolation
     # slightly different from the function get_I_from_mol_coor
     # this function is to simulate I that matches the s from experiments
     b = range(atom_sum)
@@ -488,8 +481,8 @@ def get_sM_and_PDF_from_I(I_at,I_mol,s,r_max,damp_const):
     
     RETURNS:
 
-    sM (array):
-
+    sM (array): 
+        modified scattering intensity
     PDF (array):
         pair distribution function
     r (array):
@@ -571,10 +564,10 @@ def trajectory_sim(path_mol,tra_mol_name,file_type,f,s000,s_max):
     col=int(160/t_interval)
     space_for_convol=int(200/t_interval)
         
-    [I0,I0_at,I0_mol,s]=get_I_from_mol_coor(f,s000,s_max,coor_txyz[0],atom_sum)
+    [I0,I0_at,I0_mol,s]=get_I_from_xyz(f,s000,s_max,coor_txyz[0],atom_sum)
     delta_I_over_I_t=get_2d_matrix(nt+space_for_convol*2,len(s))
     for i in range(nt):
-        [I,I_at,I_mol,s]=get_I_from_mol_coor(f,s000,s_max,coor_txyz[i],atom_sum)
+        [I,I_at,I_mol,s]=get_I_from_xyz(f,s000,s_max,coor_txyz[i],atom_sum)
         delta_I_over_I_t[i+space_for_convol]=(I-I0)/I
     for i in range(space_for_convol):
         delta_I_over_I_t[i+nt+space_for_convol]=delta_I_over_I_t[nt+space_for_convol-1]
@@ -601,14 +594,14 @@ def freq_sim(path_mol,tra_mol_name,file_type,f,s000,s_max, evolutions=10, r_max=
     col=int(160/t_interval)
     space_for_convol=int(200/t_interval)
         
-    [I0,I0_at,I0_mol,s]=get_I_from_mol_coor(f,s000,s_max,coor_txyz[0],atom_sum)
+    [I0,I0_at,I0_mol,s]=get_I_from_xyz(f,s000,s_max,coor_txyz[0],atom_sum)
     delta_I_over_I_t= []
     PDF = []
     k = 0
     for i in range(nt):
         j =i%20
         #print(j, nt)
-        [I,I_at,I_mol,s]=get_I_from_mol_coor(f,s000,s_max,coor_txyz[j],atom_sum)
+        [I,I_at,I_mol,s]=get_I_from_xyz(f,s000,s_max,coor_txyz[j],atom_sum)
         dI_I = (I-I0)/I
         delta_I_over_I_t.append(dI_I)
         sM,pdf,r = get_sM_and_PDF_from_I(I_at,I_mol,s,r_max,damp_const)
@@ -621,7 +614,7 @@ def freq_sim(path_mol,tra_mol_name,file_type,f,s000,s_max, evolutions=10, r_max=
 def dissoc_sim(path_mol, reactant, products, file_type, f, s000, s_max, r_max=800, damp_const=33):
     """ADD DOC STRING"""
     [coor0, atom_sum0] = load_static_mol_coor(path_mol, reactant, file_type)
-    [I0,I0_at,I0_mol,s]=get_I_from_mol_coor(f,s000,s_max,coor0,atom_sum0)
+    [I0,I0_at,I0_mol,s]=get_I_from_xyz(f,s000,s_max,coor0,atom_sum0)
     [sM0,pdf0,r] = get_sM_and_PDF_from_I(I0_at,I0_mol,s,r_max,damp_const)
     
 
@@ -631,7 +624,7 @@ def dissoc_sim(path_mol, reactant, products, file_type, f, s000, s_max, r_max=80
     for i in range(len(products)):
         frag_name = str(products[i])
         coor, atom_sum = load_static_mol_coor(path_mol,frag_name,file_type)
-        I,I_at,I_mol,s = get_I_from_mol_coor(f,s000,s_max,coor,atom_sum)
+        I,I_at,I_mol,s = get_I_from_xyz(f,s000,s_max,coor,atom_sum)
         I_prods.append(I)
         sM,pdf,r = get_sM_and_PDF_from_I(I0_at,I_mol,s,r_max,damp_const)
         pdf_prods.append(pdf)
@@ -1147,7 +1140,7 @@ def retrieve_PDF(left,right,s_interval1,f,s000,s_max,coor,atom_sum,damp_const,r_
     sM_ret,PDF_awful,r=get_sM_and_PDF_from_I(I_at1,I_mol_ret_filted,s1,r_max,damp_const)
     sM_ret=sM_ret/sM_ret.max()
     
-    I1,I_at1,I_mol1,s11=get_I_from_mol_coor(f,s000,s_max,coor,atom_sum)
+    I1,I_at1,I_mol1,s11=get_I_from_xyz(f,s000,s_max,coor,atom_sum)
     sM1,PDF1,r=get_sM_and_PDF_from_I(I_at1,I_mol1,s11,r_max,damp_const)
 
     sM_combined=np.empty(len(s_exp))

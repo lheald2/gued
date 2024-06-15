@@ -1158,6 +1158,7 @@ def find_center_pool(data_array, plot=True, print_stats=True):
             f"Percentage of images where the center finding failed (i.e., found the guess value): {fail_count / len(data_array) * 100}")
     return center_x, center_y
 
+
 def find_beam_center(I, center=[500, 500], r=200, printr2='no', recursiontime=0):
     recursiontime += 1
     # up down right left,r away pixles average
@@ -1413,7 +1414,9 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
 
 def _azimuthal_average(center, image, normalize=True):
     """
-    ADD DOC STRING
+    TEMPORARY CODE FOR FINDING AZIMUTHAL AVERAGE
+
+    BETA VERSION, NOT DEVELOPED 
     """
     # Create meshgrid of coordinates
     x, y = np.indices(image.shape[:2])
@@ -1449,7 +1452,9 @@ def _azimuthal_average(center, image, normalize=True):
 
 def get_azimuthal_average_pool(data_array, center, normalize=False, plot=False):
     """
-    ADD DOC STRING and test
+    TEMPORARY CODE FOR FINDING AZIMUTHAL AVERAGE
+
+    BETA VERSION, NOT DEVELOPED 
     """
     average_data = []
     std_data = []
@@ -1494,7 +1499,29 @@ def get_azimuthal_average_pool(data_array, center, normalize=False, plot=False):
     return average_data, std_data
 
 
-def normalize_to_baseline(data_array2d, min_val=50, max_val=100):  # todo add docstring and optimize
+def normalize_to_baseline(data_array2d, min_val=50, max_val=100):
+    """
+    Normalizes a 2d data set based on the average of the data between the min_val and the max_val
+
+    ARGUMENTS:
+
+    data_array2d (2d array):
+        azimuthally averaged 2d data with shape of length unique stage positons vs maximum s distance
+    
+    OPTIONAL ARGUMENTS:
+
+    min_val (int): 
+        Default set to 50. Defines the minimum point for normalization range
+    max_val (int): 
+        Default set to 100. Defines the maximum point for normalization range
+
+    RESULTS:
+
+    data_norm (2d array):
+        normalized array of azimuthally averaged data with same shape as data_array2d
+            
+    """
+
     data_array2d[:, :25] = np.nan
     data_mean = np.nanmean(data_array2d, axis=0)
     norm_factor = np.nansum(data_mean[min_val:max_val])
@@ -1505,16 +1532,43 @@ def normalize_to_baseline(data_array2d, min_val=50, max_val=100):  # todo add do
         data_norm.append(norm)
 
     data_norm = np.array(data_norm)
+
     return data_norm
 
 
-def power_fit(data_array, x_vals, return_baseline=False):
+def poly_fit(data_array, x_vals, degree = 2, , plot=True, return_baseline=False):
+    """
+    Calculates a polynomial fit of the data_array with respect to the x_vals. 
+
+    ARGUMENTS:
+
+    data_array (1d or 2d array):
+        1d or 2d data array to be fit, normally used on the dI/I or dI values after azimuthal averaging. Code checks the shape of the array
+    x_vals (1d array):
+        list of x values related to the data array (i.e., s values)
+
+    OPTIONAL ARGUMENTS:
+
+    degree (int):
+        default set to True. Defines the degree of the polynomial used for fitting
+    return_baseline (boolean):
+        default set to False. When true, returns both the corrected data and the calculated baseline
+    
+    RESULTS:
+    
+    corrected_data (2d array):
+        input 2d array - calculated baselines
+    baselines (2d array):
+        calculated baseline for each data set in the array. Only returned when return_baseline == True
+    
+    """
+
     if len(data_array.shape) == 2:
         baseline2d = []
         for i in range(len(data_array)):
             temp_data = np.copy(data_array[i])
             idx_nan = ~np.isnan(temp_data)
-            coeff = np.polyfit(x_vals[idx_nan],temp_data[idx_nan],2)
+            coeff = np.polyfit(x_vals[idx_nan],temp_data[idx_nan], degree)
             baseline = np.polyval(coeff,x_vals)
             baseline2d.append(baseline)
 
@@ -1524,12 +1578,29 @@ def power_fit(data_array, x_vals, return_baseline=False):
     elif len(data_array.shape) == 1:
         temp_data = data_array
         idx_nan = ~ np.isnan(temp_data)
-        coeff = np.polyfit(x_vals[idx_nan], temp_data[idx_nan], 2)
+        coeff = np.polyfit(x_vals[idx_nan], temp_data[idx_nan], degree)
         baseline2d = np.polyval(coeff, x_vals)
         
         corrected_data = data_array - baseline2d
     else:
         print("Data Array must be 1D or 2D array")
+
+    if plot == True:
+        plt.figure()
+        plt.subplot(1,2,1)
+        plt.plot(data_array[0])
+        plt.plot(baseline2d[0])
+        plt.xlabel("pixel")
+        plt.title("delta I/I original with fit line")
+
+        plt.subplot(1,2,2)
+        plt.plot(corrected_data[0])
+        plt.xlabel("pixel")
+        plt.title("delta I/I corrected")
+
+        plt.tight_layout()
+        plt.show()
+
     if return_baseline == True:
         return corrected_data, baseline2d
     else:
@@ -1538,7 +1609,28 @@ def power_fit(data_array, x_vals, return_baseline=False):
 
 # Saving and Loading Data
 
-def save_data(file_name, group_name, azimuthal_data, stage_positions, run_number):
+def save_data(file_name, group_name, run_number, azimuthal_data, stage_positions):
+    """
+    Saves the azimuthal average and stage positions after processing to an h5 file with the specified file_name. The group name specifies the 
+    group subset the data relates to and the run number tags the number. For example, when running large data sets, each run will be a subset
+    of data that was processed. If you have multiple experiments that can be grouped, you can save them with different group names to the same 
+    h5 file. The saved data is used for further analysis. 
+
+    ARGUMENTS:
+
+    file_name (str):
+        unique file name for the data to be saved. Can specify a full path. 
+    group_name (str):
+        label for the group of data that is being processed
+    run_number (int):
+        specifies ths subset of data being processed
+    azimuthal_data (2d array):
+        azimuthally averaged scattering intensity of run subset
+    stage_positions (1d array):
+        stage positions relating to the scattering intensity for the run subset
+
+    """
+
     # Open the HDF5 file in append mode
     with h5py.File(file_name, 'a') as f:
         # Check if the group exists, create it if not
@@ -1565,6 +1657,26 @@ def save_data(file_name, group_name, azimuthal_data, stage_positions, run_number
 
 
 def read_individual_run(file_name, group_name, run_number):
+    """
+    Allows you to read a specific run from an h5 file. 
+    
+    ARGUMENTS:
+    
+    file_name (str):
+        file name or path that holds the data of interest
+    group_name (str):
+        group subset within the file
+    run_number (int):
+        run of interest
+        
+    RETURNS:
+    
+    I_data (2d array):
+        azimuthally averaged scattering data for the specified run number
+    stage_data (1d array):
+        stage positions for the specified run number
+    """
+
     with h5py.File(file_name, 'r') as f:
         group = f[group_name]
         
@@ -1589,6 +1701,24 @@ def read_individual_run(file_name, group_name, run_number):
     return I_data, stage_data
 
 def read_combined_data(file_name, group_name):
+    """Reads in and concatenates all the data within a group from an h5 file.
+    
+    ARGUMENTS:
+    
+    file_name (str):
+        file name or path that holds the data of interest
+    group_name (str):
+        group subset within the file
+        
+    RETURNS:
+    
+    I_data (2d array):
+        azimuthally averaged scattering data for the specified group (all runs combined)
+    stage_data (1d array):
+        stage positions for the specified group (all runs combined)
+
+    """
+
     with h5py.File(file_name, 'r') as f:
         group = f[group_name]
         
@@ -1603,8 +1733,8 @@ def read_combined_data(file_name, group_name):
                 stage_data_list.append(group[dataset_name][:])
         
         # Combine data for var1 and var2
-        combined_I_data = np.concatenate(I_data_list)
-        combined_stage_data = np.concatenate(stage_data_list)
+        I_data = np.concatenate(I_data_list)
+        stage_data = np.concatenate(stage_data_list)
         
-    return combined_I_data, combined_stage_data
+    return I_data, stage_data
 
