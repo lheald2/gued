@@ -43,7 +43,7 @@ experiments conducted at the MeV-UED facility at the Stanford Linear Accelerator
     * This is by far the most time-consuming part of data processing. __Only do this with small data sets (i.e., after stage averaging) unless you're willing to spend a long time processing data.__ Takes 10 minutes per 100 images running in parallel.
 
 10. __Apply median filter__
-    * The function `gued.median_filter` applies a median filter to the data. Must replace `np.nan` values with radial average so this function is done in concert with the radial outlier removal (need to finalize).
+    * The function `gued.median_filter` applies a median filter to the data.
 
 11. __Retrieve Azimuthal Average__
     * The function `gued.azimuthal_average` takes the 3D data array and returns the azimuthal average for each data set.
