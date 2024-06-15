@@ -1,4 +1,15 @@
-# todo Clean importing calls
+"""Code written by Lauren F. Heald with support from Caidan Moore, Cuong Le, and Yusong Liu. Intended to be used for processing ultrafast 
+gas phase electron diffraction data collected at the MeV-UED hutch of LCLS at the Stanford Linear Accelerator National Laboratory. 
+
+Questions or Concerns: 
+    email: lheald2@unl.edu
+
+Affiliations:
+    Centurion Lab at the University of Nebraska -- Lincoln, NE
+    Stanford Linear Accelerator National Lab -- Menlo Park, CA
+"""
+
+
 # Standard Packages
 import numpy as np
 import numpy.ma as ma
@@ -10,7 +21,6 @@ import scipy.signal as ss
 import concurrent.futures
 from functools import partial
 import h5py
-import os
 
 # Image stuff
 import matplotlib.patches as patches
@@ -1699,6 +1709,7 @@ def read_individual_run(file_name, group_name, run_number):
         print(f"Attributes for var2_run_{run_number}: {attr_var2}")
         
     return I_data, stage_data
+
 
 def read_combined_data(file_name, group_name):
     """Reads in and concatenates all the data within a group from an h5 file.
