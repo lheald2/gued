@@ -868,7 +868,7 @@ def subtract_background(data_array, mean_background, plot=True):
 
 # Masking and Center Finding Functions
 
-def mask_generator_alg(image, fill_value=np.nan, add_rectangular=False):
+def mask_generator_alg(image, fill_value=np.nan, add_rectangular=False, plot=False):
     """
     Generate mask to cover unwanted area
 
@@ -888,17 +888,17 @@ def mask_generator_alg(image, fill_value=np.nan, add_rectangular=False):
 
     GLOBAL VARIABLES:
 
-    MASK_CENTER : 1D array, tuple, or list that contains only two values
+    MASK_CENTER (1d array, tuple, or list that contains only two values):
         Center for generating mask cover unscattered electron beam.
-    MASK_RADIUS : int
+    MASK_RADIUS (int):
         Radius of the mask.
-    ADDDED_MASK : list of 3-value-lists, optional
+    ADDDED_MASK (list of 3-value-lists):
         Additional masks. Input gonna be [[x-center, y-center, radius], [...], ...] The default is [].
 
 
     RETURNS:
     
-    mask : binary 2D array
+    mask (binary 2D array):
         Result of all the masks in an image.
 
     """
@@ -919,6 +919,38 @@ def mask_generator_alg(image, fill_value=np.nan, add_rectangular=False):
         rr, cc = draw.rectangle((0, 590), extent=(500, 40), shape=image.shape)  # (0,535) for iodobenzene
         mask[rr, cc] = fill_value
         # 515
+
+    if plot == True:
+        fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+
+        # First subplot: Mean of Unmasked Data Array
+        axs[0].imshow(image)
+        axs[0].set_title("Mean of Unmasked Data Array")
+        cbar = plt.colorbar(axs[0].imshow(image), ax=axs[0])
+        cbar.ax.set_ylabel('Intensity')
+
+        masked_data = mask*image
+        # Second subplot: Mean of Masked Data Array
+        axs[1].imshow(masked_data)
+        axs[1].set_title("Mean of Masked Data Array")
+        cbar = plt.colorbar(axs[1].imshow(masked_data), ax=axs[1])
+        cbar.ax.set_ylabel('Intensity')
+
+        # Third subplot: Contour map of average data
+        x = np.arange(300, 700)
+        y = np.arange(300, 700)
+        X, Y = np.meshgrid(y, x)
+        pc = axs[2].pcolormesh(x, y, np.log(masked_data[300:700, 300:700]), shading='auto')
+        cs = axs[2].contour(X, Y, np.log(masked_data[300:700, 300:700]), levels=20, colors='w')
+        axs[2].set_title('Contour map of average data')
+        cbar = fig.colorbar(pc, ax=axs[2])
+        cbar.ax.set_ylabel('Log(Intensity)')
+
+        # Adjust layout to prevent overlap
+        plt.tight_layout()
+
+        # Show the combined figure
+        plt.show()
 
     return mask
 
@@ -960,7 +992,6 @@ def apply_mask(data_array, fill_value=np.nan, add_rectangular=False,
     masked_data = data_array * mask_generator_alg(mean_data, fill_value, add_rectangular)
     masked_mean = np.nanmean(masked_data, axis=0)
 
-    print(masked_data.shape)
     if plot == True:
         fig, axs = plt.subplots(1, 3, figsize=(15, 5))
 
@@ -1546,7 +1577,7 @@ def normalize_to_baseline(data_array2d, min_val=50, max_val=100):
     return data_norm
 
 
-def poly_fit(data_array, x_vals, degree = 2, , plot=True, return_baseline=False):
+def poly_fit(data_array, x_vals, degree = 2, plot=True, return_baseline=False):
     """
     Calculates a polynomial fit of the data_array with respect to the x_vals. 
 
