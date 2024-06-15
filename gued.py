@@ -71,6 +71,8 @@ def _show_counts(stage_positions, counts):
 
     plt.tight_layout()
     plt.show()
+    
+    return
 
 
 def _get_counts(data_array, plot=False):
