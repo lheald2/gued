@@ -660,7 +660,33 @@ def dissoc_sim(path_mol, reactant, products, file_type, f, s000, s_max, r_max=80
     return dsM, s, dPDF, r
 
 
-def power_fit(data_array, x_vals, return_baseline=False):
+def poly_fit(data_array, x_vals, return_baseline=False):
+    """
+    Calculates a polynomial fit of the data_array with respect to the x_vals. 
+
+    ARGUMENTS:
+
+    data_array (1d or 2d array):
+        1d or 2d data array to be fit, normally used on the dI/I or dI values after azimuthal averaging. Code checks the shape of the array
+    x_vals (1d array):
+        list of x values related to the data array (i.e., s values)
+
+    OPTIONAL ARGUMENTS:
+
+    degree (int):
+        default set to True. Defines the degree of the polynomial used for fitting
+    return_baseline (boolean):
+        default set to False. When true, returns both the corrected data and the calculated baseline
+    
+    RESULTS:
+    
+    corrected_data (2d array):
+        input 2d array - calculated baselines
+    baselines (2d array):
+        calculated baseline for each data set in the array. Only returned when return_baseline == True
+    
+    """
+
     if len(data_array.shape) == 2:
         baseline2d = []
         for i in range(len(data_array)):
@@ -1262,6 +1288,7 @@ def sM_err(left,right,s_interval1,f,s000,s_max,coor,atom_sum,damp_const,r_max,I_
 
 
 def scan_s_calibration(scmin,scmax,left,right,f,s000,s_max,coor,atom_sum,damp_const,r_max,I_ground_state):
+    #uses sM_err function
     interval1=0.0002
     interval2=0.00002
     R1=np.empty(int((scmax-scmin)/interval1))

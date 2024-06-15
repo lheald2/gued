@@ -32,7 +32,7 @@ def get_azimuthal_average(data,x,y):
 
 if __name__ == '__main__':
     data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\Run\\'
-    data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180623\\Run\\'
+    #data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180623\\Run\\'
     run_path = "*\\*\\ANDOR1_*.tif"
 
 
@@ -58,8 +58,8 @@ if __name__ == '__main__':
     print(file_name)
     group_name = "s4"
 
-    #data_sets = [[0, 225], [275, 400], [400,600], [600, 800], [800, 1000], [1000,1200], [1200,1400], [1400,1600], [1600, 1800], [1800,1990]]
-    data_sets = [[0,200], [200, 400], [400,600], [600, 800], [800, 1000], [1000,1200], [1200, 1400], [1400, 1600], [1600, 1800], [1800, 2000]]
+    data_sets = [[0, 225], [275, 400], [400,600], [600, 800], [800, 1000], [1000,1200], [1200,1400], [1400,1600], [1600, 1800], [1800,1990]]
+    #data_sets = [[0,200], [200, 400], [400,600], [600, 800], [800, 1000], [1000,1200], [1200, 1400], [1400, 1600], [1600, 1800], [1800, 2000]]
 
     start = time.perf_counter()
 
@@ -89,7 +89,8 @@ if __name__ == '__main__':
         masked_data = gued.apply_mask(data_array, plot=False)
 
         print(f"Removing Radial Outliers for files {data_sets[i][0]} to {data_sets[i][1]}")
-        center = [560, 500]
+        #center = [560, 500]
+        center = [489, 464]
         cleaned_data = []
         cleaned_data = gued.remove_radial_outliers_pool(masked_data, center, plot=False)
 
