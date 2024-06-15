@@ -70,3 +70,8 @@ Cuong Le
 Yusong Liu  
 
 The entire Centurion group at the University of Nebraska - Lincoln offered advice and guidance throughout the development. 
+
+## Dependencies:
+
+numpy  *  scipy  *  matplotlib  *  pandas  *  tifffile  *  skimage  *  concurrent  *  h5py  *  glob  *  functools  
+
