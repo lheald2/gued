@@ -39,7 +39,7 @@ def import_s():
     lamb=h/p
     k=2*np.pi/lamb #wave vector of the incident electron
 
-    path=path_dcs+'C.dat'
+    path=PATH_DCS+'C.dat'
     with open(path,'r') as file:
         a=file.read()
     a0=a.split('\n')
@@ -54,7 +54,7 @@ def import_s():
     return s
 
 
-def read_dat_dcs(atom_no,path_dcs):
+def read_dat_dcs(atom_no):
     """ 
     Reads in the scattering intensity (form factors) for each atom in the molecule of interest from the .dat files calculated using ELSEPA. 
     
@@ -62,7 +62,10 @@ def read_dat_dcs(atom_no,path_dcs):
 
     atom_no (int):
         maximum atomic number of interest (default value is 55)
-    path_dcs (string):
+    
+    GLOBAL VARIABLES:
+
+    PATH_DCS (string):
         path to the folder containing the .dat files
     
     RETURNS:
@@ -72,7 +75,7 @@ def read_dat_dcs(atom_no,path_dcs):
     """
     
     atom_sym=no_to_sym(atom_no)
-    path=path_dcs+atom_sym+'.dat'
+    path=PATH_DCS+atom_sym+'.dat'
     with open(path,'r') as file:
         a=file.read()
     a0=a.split('\n')
@@ -138,7 +141,7 @@ def import_DCS(max_at_no=55):
     
     f=np.empty((max_at_no+1,130))
     for i in range(max_at_no):
-        f[i+1]=read_dat_dcs(i+1,path_dcs)
+        f[i+1]=read_dat_dcs(i+1,PATH_DCS)
     return f
 
 
