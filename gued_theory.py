@@ -11,16 +11,14 @@ from scipy.optimize import curve_fit
 import scipy.stats
 from PIL import Image
 from matplotlib.colors import TwoSlopeNorm
-from scipy.ndimage import gaussian_filter1d
 warnings.simplefilter("ignore")
-from datetime import date
 from gued_globals import *
 
 #Authors: Lauren F. Heald, Keke Chen
 #Contact: lheald2@unl.edu, ckk20@mails.tsinghua.edu.cn
 
 TABLE = pd.read_csv(PATH_DCS+'Periodic_Table.csv')
-
+angs = '\u00C5' 
 
 def import_s():
     """ This functions uses the C.dat files as an example file to generate values of s for the simulation calculations. 
@@ -219,7 +217,72 @@ def load_xyz(xyz_file):
     atom_sum = int(np.array(atom_sum))
     coordinates = np.array(coordinates[2:])
     return coordinates, atom_sum
-    
+
+
+def load_freq_xyz(path_mol, mol_name, file_type):
+    """
+    Reads in a frequency trajectory .xyz file containing many structures which evolve over time generated from programs such as Gaussian or
+    ORCA. The file also contains information on the time points for each structural evolution.
+
+    ARGUMENTS:
+
+    path_mol (string):
+        path to the directory of the molecular structure
+    mol_name (string):
+        file name of the structural file used for the simulation
+    file_type (string):
+        either xyz or csv depending on what the file being used is.
+
+    RETURNS:
+
+    re (array):
+        array of atom symbol, x, y, z, and atom number for each time step
+    atom_sum (int):
+        total number of atoms in the molecule
+    time (array):
+        time points corresponding to the simulation in fs
+    """
+
+    filename = path_mol + mol_name + file_type
+    xyz_file = filename
+    file = open(xyz_file, 'r')
+    text = file.readlines()
+    file.close()
+    count = len(text)
+    re = []
+
+    atom_sum = list(map(int, text[0].split()))
+    atom_sum = atom_sum[0]
+    iteration = atom_sum + 2
+
+    groups = np.arange(0, count, (iteration))
+
+    temp = (list(map(str, text[atom_sum + 3].split())))
+    inv_cm = float(temp[2])
+    print(inv_cm)
+    fs = (1 / (inv_cm * 2.99e10)) * 1e15
+    print("fs=", fs)
+    fs_step = fs / len(groups)
+    time = np.arange(0, fs, fs_step)
+
+    for j in range(len(groups)):
+        temp = []
+        lines = np.arange(groups[j] + 2, groups[j] + iteration)
+        for line in lines:
+            string = list(map(str, text[line].split()))
+            atom_num = sym_to_no(string[0])
+            info = string[0:4] + [str(atom_num)]
+            temp.append(info)
+            # print(string)
+        re.append(temp)
+
+    re = np.array(re)
+
+    # for i in range(time_count):
+    #     coor1=get_modified_coor_for_xyz(coor_txyz[i][:][:],atom_sum)
+    #     coor_txyz[i]=coor1
+    return re, atom_sum, time
+
 
 def get_modified_coor_for_xyz(re,atom_sum):
     """ 
@@ -557,25 +620,123 @@ def plot_I_sM_PDF(I,sM,PDF,s,r,title_I,title_sM,title_PDF):
     return
 
 
-def trajectory_sim(path_mol,tra_mol_name,file_type,f,s000,s_max):
-    """ADD DOC STRING"""
+def load_time_evolving_xyz(path_mol, mol_name, file_type):
+    """Reads in a trajectory .xyz file containing many structures which evolve over time generated from programs such as Gaussian or ORCA. The
+        file also contains information on the time points for each structural evolution.
 
-    coor_txyz,atom_sum,TIME=load_time_evolving_xyz(path_mol,tra_mol_name,file_type) #load xyz data
+    ARGUMENTS:
+
+    path_mol (string) = path to the directory of the molecular structure
+    mol_name (string) = file name of the structural file used for the simulation
+    file_type (string) = either xyz or csv depending on what the file being used is.
+
+    RETURNS:
+    coor_txyz (array) = array of atom symbol, x, y, z, and atom number for each time step
+    atom_sum (int) = total number of atoms in the molecule
+    time (array) = time points corresponding to the simulation in fs (??)
+    """
+
+    mol_filename = mol_name + '.xyz'
+    with open(path_mol + mol_filename, 'r') as f:
+        a = f.read()
+
+    a0 = a.split('\n')
+    atom_sum = int(a0[0])  # get the total atom number in the molecule, this does great help
+
+    time_count = int((len(a0) - 1) / (atom_sum + 2))  # find how many time points are there in the time evolution file
+    time = [0 for i in range(time_count)]
+    print("count = ", time_count)
+
+    coor_txyz = get_3d_matrix(time_count, atom_sum, 4)
+    # coor_txyz[time order number][atom type][coordinate xyz]
+
+    m = 0
+    n = 0
+    o = 0
+    # just little tricks to move the data into right place, from the file to array
+    # don't be confused by these parameters
+    for i in range(time_count):
+        m = 0
+        a1 = str(a0[(atom_sum + 2) * i + 1]).split(' ')
+        for j in a1:
+            if j == 't=':
+                m = 1
+            if j != '' and j != 't=' and m == 1:
+                time[i] = j
+                break
+        for j in range(atom_sum):
+            a1 = str(a0[(atom_sum + 2) * i + 2 + j]).split(' ')
+            for k in a1:
+                if k != '':
+                    coor_txyz[i][n][o] = k
+                    o += 1
+            o = 0
+            n += 1
+        n = 0
+    print(len(coor_txyz[0][0]))
+    for i in range(time_count):
+        coor1 = get_modified_coor_for_xyz(coor_txyz[i][:][:], atom_sum)
+        coor_txyz[i] = coor1
+
+    return np.array(coor_txyz), atom_sum, time
+
+
+def static_sim(path_mol, mol_name, file_type, s_max = 12, r_max = 800, damp_const = 33, plot=True, return_data = False):
+    """ADD DOC STRING"""
+    form_factors = import_DCS(55)
+    s = import_s()
+    coor, atom_sum  = load_static_mol_coor(path_mol,mol_name,file_type)
+    _, I_at, I_mol, s_new = get_I_from_xyz(form_factors, s, s_max, coor, atom_sum)
+    sM, PDF, r_new = get_sM_and_PDF_from_I(I_at, I_mol, s_new, r_max, damp_const)
+    if plot == True:
+        plt.figure(figsize=(8,4))
+            
+        plt.subplot(1,2,1)    
+        plt.plot(s_new,sM)
+        plt.xlabel(r'S, ['+angs+'$^{-1}$]')
+        plt.ylabel('sM(s)')
+        plt.title('Modified Scattering Intensity')
+        plt.grid()
+            
+        plt.subplot(1,2,2)    
+        plt.plot(r_new, PDF)
+        plt.xlabel(r'R, [pm]')
+        plt.ylabel('PDF')
+        plt.title('Pair Distribution Function')
+        plt.grid()
+            
+        plt.tight_layout()
+        plt.show()
+    
+    if return_data == True:
+        return I_at, I_mol, s_new, sM, PDF, r_new
+    else:
+        return
+
+
+def trajectory_sim(path_mol, mol_name, file_type,s_max=12):
+    """ADD DOC STRING"""
+    form_factors = import_DCS(55)
+    s = import_s()
+    coor_txyz, atom_sum, time=load_time_evolving_xyz(path_mol,mol_name,file_type) #load xyz data
     #options: load_time_evolving_xyz, or load_time_evolving_xyz1
-    nt=len(TIME)
-    t_interval=float(TIME[1])-float(TIME[0])
-    col=int(160/t_interval)
-    space_for_convol=int(200/t_interval)
+    time_steps = len(time)
+    t_interval = float(time[1])-float(time[0])
+    col = int(160/t_interval)
+    space_for_convol = int(200/t_interval)
         
-    [I0,I0_at,I0_mol,s]=get_I_from_xyz(f,s000,s_max,coor_txyz[0],atom_sum)
-    delta_I_over_I_t=get_2d_matrix(nt+space_for_convol*2,len(s))
-    for i in range(nt):
-        [I,I_at,I_mol,s]=get_I_from_xyz(f,s000,s_max,coor_txyz[i],atom_sum)
+    I0,I0_at,I0_mol,s_new = get_I_from_xyz(form_factors, s, s_max,coor_txyz[0],atom_sum)
+    delta_I_over_I_t = get_2d_matrix(time_steps+space_for_convol*2,len(s_new))
+
+    for i in range(time_steps):
+        [I,I_at,I_mol,s]=get_I_from_xyz(form_factors, s, s_max,coor_txyz[i],atom_sum)
         delta_I_over_I_t[i+space_for_convol]=(I-I0)/I
+    
     for i in range(space_for_convol):
-        delta_I_over_I_t[i+nt+space_for_convol]=delta_I_over_I_t[nt+space_for_convol-1]
+        delta_I_over_I_t[i+time_steps+space_for_convol]=delta_I_over_I_t[time_steps+space_for_convol-1]
+    
     delta_I_over_I_t=np.array(delta_I_over_I_t)
-    plot_delay_simulation_with_conv(delta_I_over_I_t*100,len(s),col,t_interval,nt,space_for_convol)
+    plot_delay_simulation_with_conv(delta_I_over_I_t*100,len(s),col,t_interval,time_steps,space_for_convol)
     #this simulation assumes full dissociation
     #after taking dissociation percentage into consideration, the change in signal is much smaller
     plt.ylabel('s/angs^-1')
@@ -614,7 +775,7 @@ def freq_sim(path_mol,tra_mol_name,file_type,f,s000,s_max, evolutions=10, r_max=
     return delta_I_over_I_t, new_time, s, PDF, r
 
 
-def dissoc_sim(path_mol, reactant, products, file_type, f, s000, s_max, r_max=800, damp_const=33):
+def dissoc_sim(path_mol, reactant, products, file_type, f, s000, s_max, r_max=800, damp_const=33, plot=False):
     """ADD DOC STRING"""
     [coor0, atom_sum0] = load_static_mol_coor(path_mol, reactant, file_type)
     [I0,I0_at,I0_mol,s]=get_I_from_xyz(f,s000,s_max,coor0,atom_sum0)
@@ -638,21 +799,23 @@ def dissoc_sim(path_mol, reactant, products, file_type, f, s000, s_max, r_max=80
     pdf_prods = np.sum(pdf_prods, axis=0)
     dsM = s*(I_prods-I0)/I0_at
     
-    plt.figure(figsize=(8,4))
-    
-    plt.subplot(1,2,1)
-    plt.plot(s, sM0, label = "reactant")
-    plt.plot(s, sM_prods, label="products")
-    plt.xlabel(r'S, ['+angs+'$^{-1}$]');plt.ylabel('sM(s)');
-    plt.legend()
-    plt.title("sM")
-    
-    plt.subplot(1,2,2)
-    plt.plot(r, pdf0, label="reactant")
-    plt.plot(r, pdf_prods, label="products")
-    plt.xlabel(r'R, [pm]');
-    plt.legend()
-    plt.title("PDF")
+    if plot == True:
+        angs = '\u00C5' # Angstrom sign
+        plt.figure(figsize=(8,4))
+        
+        plt.subplot(1,2,1)
+        plt.plot(s, sM0, label = "reactant")
+        plt.plot(s, sM_prods, label="products")
+        plt.xlabel(r'S, ['+angs+'$^{-1}$]');plt.ylabel('sM(s)');
+        plt.legend()
+        plt.title("sM")
+        
+        plt.subplot(1,2,2)
+        plt.plot(r, pdf0, label="reactant")
+        plt.plot(r, pdf_prods, label="products")
+        plt.xlabel(r'R, [pm]');
+        plt.legend()
+        plt.title("PDF")
 
     dPDF=[0 for i in range(r_max)]
     for i in range(len(s)-1): 
@@ -775,6 +938,28 @@ def poly_remove_bkg(s1,data):
     Ivals=p(s1)
     bkg_removed=data-Ivals
     return bkg_removed
+
+
+def get_2d_matrix(x, y):
+    # an easy way to set whatever matrix you want
+    d = []
+    for i in range(x):
+        d.append([])
+        for j in range(y):
+            d[i].append(0)
+    return d
+
+
+def get_3d_matrix(x, y, z):
+    # an easy way to set whatever matrix you want
+    matrix3d = []
+    for i in range(x):
+        matrix3d.append([])
+        for j in range(y):
+            matrix3d[i].append([])
+            for k in range(z):
+                matrix3d[i][j].append(0)
+    return matrix3d
 
 
 def high_freq_filter(cutoff_freq,s_interval,data):
