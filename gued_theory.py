@@ -584,16 +584,16 @@ def get_sM_and_PDF_from_I(I_at,I_mol,s,r_max,damp_const):
 def plot_delay_simulation_with_conv(matrix_before_conv,x_range,col,t_interval,nt,space_for_convol):
     """ ADD DOC STRING"""
 
-    x0=np.linspace(-col,col,int(255/t_interval))
-    h=np.exp(-x0**2*t_interval**2/8000)/(np.pi*8000/t_interval**2)**0.5 #normalize the gaussian
-    M1=get_2d_matrix(x_range,nt+space_for_convol*2)
+    x0 = np.linspace(-col,col,int(255/t_interval))
+    h = np.exp(-x0**2*t_interval**2/8000)/(np.pi*8000/t_interval**2)**0.5 #normalize the gaussian
+    M1 = get_2d_matrix(x_range,nt+space_for_convol*2)
     for i in range(x_range):
         M1[i]=signal.convolve(matrix_before_conv[:,i],h,mode='same')
 
     #M1=np.transpose(M1)
     M1 = np.array(M1)
             
-    norm=TwoSlopeNorm(vmin=M1.min(),vcenter=0,vmax=M1.max())
+    norm = TwoSlopeNorm(vmin=M1.min(),vcenter=0,vmax=M1.max())
     plt.figure(figsize=(15,5))
     pc=plt.imshow(M1[:, 0:nt+space_for_convol-1],norm=norm,cmap=plt.get_cmap('seismic'),alpha=0.65)
     plt.colorbar(pc)
