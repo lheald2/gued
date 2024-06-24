@@ -1744,7 +1744,7 @@ def read_individual_run(file_name, group_name, run_number):
     return I_data, stage_data
 
 
-def read_combined_data(file_name, group_name):
+def read_combined_data(file_name, group_name, run_numbers = 'all'):
     """Reads in and concatenates all the data within a group from an h5 file.
     
     ARGUMENTS:
@@ -1762,21 +1762,31 @@ def read_combined_data(file_name, group_name):
         stage positions for the specified group (all runs combined)
 
     """
-
-    with h5py.File(file_name, 'r') as f:
-        group = f[group_name]
-        
-        # Collect all datasets for var1 and var2
+    if run_numbers == 'all':
+        with h5py.File(file_name, 'r') as f:
+            group = f[group_name]
+            
+            # Collect all datasets for var1 and var2
+            I_data_list = []
+            stage_data_list = []
+            
+            for dataset_name in group.keys():
+                if 'I' in dataset_name:
+                    I_data_list.append(group[dataset_name][:])
+                elif 'stage' in dataset_name:
+                    stage_data_list.append(group[dataset_name][:])
+            
+            # Combine data for var1 and var2
+            I_data = np.concatenate(I_data_list)
+            stage_data = np.concatenate(stage_data_list)
+    
+    elif type(run_numbers) == list:
         I_data_list = []
         stage_data_list = []
-        
-        for dataset_name in group.keys():
-            if 'I' in dataset_name:
-                I_data_list.append(group[dataset_name][:])
-            elif 'stage' in dataset_name:
-                stage_data_list.append(group[dataset_name][:])
-        
-        # Combine data for var1 and var2
+        for run_number in run_numbers:
+            I, stage = read_individual_run(file_name, group_name, run_number)
+            I_data_list.append(I)
+            stage_data_list.append(stage)
         I_data = np.concatenate(I_data_list)
         stage_data = np.concatenate(stage_data_list)
         
