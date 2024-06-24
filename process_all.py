@@ -31,7 +31,7 @@ def get_azimuthal_average(data,x,y):
     return np.array(I)
 
 if __name__ == '__main__':
-    data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\Run\\'
+    data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\Run\\*\\'
     #data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180623\\Run\\'
     run_path = "*\\*\\ANDOR1_*.tif"
 
@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
     file_name = f"{exp_label}_{today}.h5"
     print(file_name)
-    group_name = "s4"
+    group_name = "s1"
 
     data_sets = [[0, 225], [275, 400], [400,600], [600, 800], [800, 1000], [1000,1200], [1200,1400], [1400,1600], [1600, 1800], [1800,1990]]
     #data_sets = [[0,200], [200, 400], [400,600], [600, 800], [800, 1000], [1000,1200], [1200, 1400], [1400, 1600], [1600, 1800], [1800, 2000]]
@@ -131,12 +131,11 @@ if __name__ == '__main__':
 
         s_cali = 0.026
         #posi_0    = 154.405 # The reference T0
-        #posi_0 = 108.61
-        posi_0 = 26.9
+        posi_0 = 108.61
         s = np.arange(0,len(norm_data[0]))*s_cali # The Q axis
 
         print(f"Saving Data for files {data_sets[i][0]} to {data_sets[i][1]} as run number {i}")
-        gued.save_data(file_name, group_name, norm_data, stage_positions, i)
+        gued.save_data(file_name, group_name, i, norm_data, stage_positions)
         del data_array, stage_positions, file_numbers, counts, counts_mean, counts_std
 
     stop = time.perf_counter()
