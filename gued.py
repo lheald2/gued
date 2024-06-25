@@ -43,31 +43,31 @@ def _show_counts(stage_positions, counts):
     counts_mean = np.mean(counts)  # Mean values of Total Counts of all images
     counts_std = np.std(counts)  # the STD of all the tc for all the iamges
     uni_stage = np.unique(stage_positions)  # Pump-probe stage position
-    plt.figure()  # Plot counts rate, images number at each posi, and bad images
+    plt.figure(figsize=(12,10))  # Plot counts rate, images number at each posi, and bad images
 
     plt.subplot(1, 3, 1)
     plt.plot(counts, '-d')
-    plt.axhline(y=counts_mean, color='k', linestyle='-', linewidth=1, label="mean counts");
-    plt.axhline(y=counts_mean - (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="min counts");
-    plt.axhline(y=counts_mean + (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="max counts");
-    plt.xlabel('Images orderd in lab time');
-    plt.ylabel('Counts');
+    plt.axhline(y=counts_mean, color='k', linestyle='-', linewidth=1, label="mean counts")
+    plt.axhline(y=counts_mean - (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="min counts")
+    plt.axhline(y=counts_mean + (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="max counts")
+    plt.xlabel('Images orderd in lab time')
+    plt.ylabel('Counts')
     plt.legend()
-    plt.title('Total counts');
+    plt.title('Total counts')
 
     plt.subplot(1, 3, 2)  # Histogram the number of images at each posi
-    plt.plot(uni_stage, '-o');
-    plt.xlabel('pp stage posi');
-    plt.ylabel('Stg Position [mm]');
-    plt.title('Delay Stage Position');
+    plt.plot(uni_stage, '-o')
+    plt.xlabel('pp stage posi')
+    plt.ylabel('Stg Position [mm]')
+    plt.title('Delay Stage Position')
 
     plt.subplot(1, 3, 3)  # Histogram the number of images at each posi
     posi_edges_bins = np.append(uni_stage - 0.001, uni_stage[-1])
     posi_hist, posi_edges = np.histogram(stage_positions, bins=posi_edges_bins)
     plt.plot(uni_stage, posi_hist, '-*')
-    plt.xlabel('pp stage posi [mm]');
-    plt.ylabel('Num of Imges');
-    plt.title('Num of images at each delay');
+    plt.xlabel('pp stage posi [mm]')
+    plt.ylabel('Num of Imges')
+    plt.title('Num of images at each delay')
 
     plt.tight_layout()
     plt.show()
@@ -146,7 +146,7 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
 
     """
     data_array = tf.imread(file_names)  # construct array containing files
-    if len(SEPARATORS) == 2:
+    if type(SEPARATORS) == list:
         try:
             stage_pos = []
             file_order = []
@@ -168,7 +168,7 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
         except IndexError:
             raise ValueError(
                 "Invalid index values. Make sure the index values are within the range of the file name strings.")
-    elif len(SEPARATORS) == 1:
+    elif type(SEPARATORS) == str:
         try:
             stage_pos = []
             file_order = []
@@ -176,7 +176,7 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
                 # stage_pos = [np.float64(file_name[idx_start:idx_end]) for file_name in file_names]
                 # stage_pos = np.array(stage_pos)
                 for file in file_names:
-                    string = list(map(str, file.split("/")))
+                    string = list(map(str, file.split("\\")))
                     string = list(map(str, string[-1].split(SEPARATORS)))
                     file_order.append(int(string[2]))
                     stage_pos.append(float(string[3]))
@@ -214,24 +214,24 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
 
     if plot == True:
         test = data_array[0]
-        plt.figure(figsize=[12, 10])
-        plt.subplot(1, 3, 1);
-        plt.imshow(test, cmap='jet');
-        plt.xlabel('Pixel');
-        plt.ylabel('Pixel');
+        plt.figure(figsize=(12,10))
+        plt.subplot(1, 3, 1)
+        plt.imshow(test, cmap='jet')
+        plt.xlabel('Pixel')
+        plt.ylabel('Pixel')
         plt.title('Linear Scale(data)')
 
-        plt.subplot(1, 3, 2);
-        plt.imshow(np.log(test), cmap='jet');
-        plt.xlabel('Pixel');
-        plt.ylabel('Pixel');
+        plt.subplot(1, 3, 2)
+        plt.imshow(np.log(test), cmap='jet')
+        plt.xlabel('Pixel')
+        plt.ylabel('Pixel')
         plt.title('Log Scale(data)')
 
-        plt.subplot(1, 3, 3);
+        plt.subplot(1, 3, 3)
         plt.hist(test.reshape(-1), bins=30, edgecolor="r", histtype="bar", alpha=0.5)
-        plt.xlabel('Pixel Intensity');
-        plt.ylabel('Pixel Number');
-        plt.title('Hist of the pixel intensity(data)');
+        plt.xlabel('Pixel Intensity')
+        plt.ylabel('Pixel Number')
+        plt.title('Hist of the pixel intensity(data)')
         plt.yscale('log')
         plt.tight_layout()
         plt.show()
@@ -365,7 +365,7 @@ def _sort_files_multistage(file_order, ir_stage_pos, uv_stage_pos):
     idx_list = []
     uni_stage = np.unique(stage_positions)
     for i in range(len(uni_stage)):
-        # file_numbers = file_order[np.where(stage_positions==uni_stage[i])[0]];
+        # file_numbers = file_order[np.where(stage_positions==uni_stage[i])[0]]
         # file_numbers = file_numbers[idx_temp]
         stage_idx = np.where(stage_positions == uni_stage[i])[0]
         file_numbers = file_order[stage_idx]
@@ -384,7 +384,7 @@ def _sort_files(file_order, stage_positions):
     idx_list = []
 
     for i in range(len(uni_stage)):
-        # file_numbers = file_order[np.where(stage_positions==uni_stage[i])[0]];
+        # file_numbers = file_order[np.where(stage_positions==uni_stage[i])[0]]
         # file_numbers = file_numbers[idx_temp]
         stage_idx = np.where(stage_positions == uni_stage[i])[0]
         file_numbers = file_order[stage_idx]
@@ -455,13 +455,13 @@ def remove_counts(data_array, stage_positions, file_order, counts, added_range =
         plt.figure(figsize=(12, 4))  # Plot counts rate, images number at each posi, and bad images
 
         plt.plot(new_counts, '-d')
-        plt.axhline(y=counts_mean, color='k', linestyle='-', linewidth=1, label="mean counts");
-        plt.axhline(y=counts_mean - (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="min counts");
-        plt.axhline(y=counts_mean + (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="max counts");
-        plt.xlabel('Images orderd in lab time');
-        plt.ylabel('Counts');
+        plt.axhline(y=counts_mean, color='k', linestyle='-', linewidth=1, label="mean counts")
+        plt.axhline(y=counts_mean - (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="min counts")
+        plt.axhline(y=counts_mean + (3 * counts_std), color='r', linestyle='-', linewidth=0.5, label="max counts")
+        plt.xlabel('Images orderd in lab time')
+        plt.ylabel('Counts')
         plt.legend()
-        plt.title('Total counts');
+        plt.title('Total counts')
 
         plt.tight_layout()
         plt.show()
@@ -643,10 +643,8 @@ def remove_background_pool(data_array, remove_noise=True, plot=False):
     clean_data = np.array(clean_data)
     backgrounds = np.array(backgrounds)
 
-    if plot == True:
-        fig = plt.figure(figsize = (12,4)) # Plot counts rate, images number at each posi, and bad images
-            
-        fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    if plot == True:   
+        fig, axes = plt.subplots(1, 3, figsize=(12, 6))
         vmin_1_1, vmax_1_1 = 10**-0, 4000 
 
         #Before
@@ -1455,75 +1453,105 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
     return clean_data
 
 
-def _azimuthal_average(center, image, normalize=True):
+def azimuthal_integration_alg(center, image, max_azi=450):
     """
-    TEMPORARY CODE FOR FINDING AZIMUTHAL AVERAGE
+    Generate 1D data from 2D image using azimuthal integration.
+    1D data must be clean before applying azimuthal integration.
 
-    BETA VERSION, NOT DEVELOPED 
+    Parameters
+    ----------
+    dat : 2D array
+        Diffration pattern (result after background subtraction and masking).
+    center : list, 1D array, or tuple that containt only two values
+        Center of the image.
+
+    Returns
+    -------
+    Three 1D array: 
+        1: s (length from the center corresponding to each value)
+        2: azimuthal data
+        3: standard deviation of azimuthal data
+
     """
-    # Create meshgrid of coordinates
-    x, y = np.indices(image.shape[:2])
-
-    # Convert coordinates to polar coordinates
-    theta = np.arctan2(y - center[1], x - center[0])
-    rho = np.sqrt((x - center[0]) ** 2 + (y - center[1]) ** 2)
-
-    # Normalize rho to [0, max_radius] for image indexing
-    max_radius = np.sqrt(center[0] ** 2 + center[1] ** 2)
-    print(f"Max radius = {max_radius}")
-    #max_radius = len(image[0]) - min(center)
-
-    rho_normalized = (rho / max_radius) * (image.shape[0] / 2)
-
-    # Convert theta to degrees and ensure it's within [0, 360]
-    theta_degrees = np.degrees(theta) % 360
-
-    # Create polar image with correct dimensions
-    polar_image = np.empty((int(max_radius), 360))
-    polar_image.fill(np.nan)
-
-    # Fill in the polar image with values from the original image
-    for i in range(image.shape[0]):
-        for j in range(image.shape[1]):
-            polar_image[int(rho_normalized[i, j]), int(theta_degrees[i, j])] = image[i, j]
-
-    azi_ave = np.nanmean(polar_image, axis=1)
-    azi_std = np.nanstd(polar_image, axis=1)
-
-    return azi_ave, azi_std
+    
+    xlength, rmat = preprocess_for_azimuthal_checking(center, image)
+    azi_dat, azi_err, s0 = [], [], []
+    #dat[dat<-300] = np.nan
+    
+    mask_detect = True
+    for i in range(xlength):
+        roi = np.copy(image[rmat==int(i+1)])
+        if len(roi)==0:
+            break
+        
+        if int(i+1)>= max_azi:
+            break
+        # Check the area of mask so the azimuthal integration will ignore that.
+        if mask_detect==True:
+            if np.sum(np.isnan(roi)) < len(roi):
+                mask_detect=False
+                
+        if mask_detect==False:
+            s0.append(i+1)
+            azi_dat.append(np.nanmean(roi))
+            azi_err.append(np.nanstd(roi)/np.sqrt(abs(np.nansum(roi))))
+            
+    return np.array(s0), np.array(azi_dat), np.array(azi_err)
 
 
 def get_azimuthal_average_pool(data_array, center, normalize=False, plot=False):
     """
-    TEMPORARY CODE FOR FINDING AZIMUTHAL AVERAGE
+    Code for getting the azimuthal average of each image for a given center. 
 
-    BETA VERSION, NOT DEVELOPED 
+    ARGUMENTS:
+
+    data_array (3d array):
+        array of images which will be integrated over. 
+    center (list):
+        Can be either a list with length two of [cx, cy] or a list of lists i.e., [[cx1, cy1], [cx2, cy2]...] which define the center positions
+
+    OPTIONAL ARGUMENTS:
+
+    normalize (boolean):
+        Default set to False. When true, runs the normalize_to_baseline function
+    plot (boolean):
+        Default set to False. When true, plots an example of the azimuthally averaged data
+
+    RETURNS:
+
+    average_data (2d array):
+        Integrated averages for each image
+    std_data (2d array):
+        Standard deviations associated with integrated average. 
     """
     average_data = []
     std_data = []
+    s_ranges = []
 
     if len(center) > 2:
         print("Using all center values ")
         print("Calculating azimuthal average for all data")
         with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
             # Zip the arrays together and submit to the executor
-            results = list(executor.map(lambda args: _azimuthal_average(*args), zip(data_array, center)))
+            results = list(executor.map(lambda args: azimuthal_integration_alg(*args), zip(center, data_array)))
         for result in results:
-            ave, std = result
+            s, ave, std = result
             average_data.append(ave)
             std_data.append(std)
+            s_ranges.append(s)
 
     elif len(center) == 2:
         print("Using average center")
         print("Calculating azimuthal average for all data")
         with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
-            futures = [executor.submit(partial(_azimuthal_average, center), data) for data in data_array]
+            futures = [executor.submit(partial(azimuthal_integration_alg, center), data) for data in data_array]
             results = [future.result() for future in futures]
 
         for result in results:
-            ave, std = result
+            s, ave, std = result
             average_data.append(ave)
             std_data.append(std)
+            s_ranges.append(s)
 
     average_data = np.array(average_data)
     std_data = np.array(std_data)
@@ -1577,6 +1605,37 @@ def normalize_to_baseline(data_array2d, min_val=50, max_val=100):
     data_norm = np.array(data_norm)
 
     return data_norm
+
+
+def normalize_to_range(data_array, min_val = -1, max_val=1):
+    """ Normalizes a 2d array so that it falls within the defined minimum value and maximum value. 
+    
+    ARGUMENTS:
+    
+    data_array (2d array):
+        array of data such as the azimuthally averaged data with respect to stage position
+        
+    OPTIONAL ARGUMENTS:
+    
+    min_val (int):
+        Default set to -1. Minimum value that the new data should be within
+    max_val (int):
+        Default set to 1. Maximum value that the new data should be within
+
+    RETURNS:
+
+    data_norm (2d array):
+        new data that falls within minimum and maximum values with the same shape as the input array. 
+
+    """
+
+    data_norm = []
+
+    for i in range(len(data_array)):
+        norm = (max_val - min_val)*(data_array[i] - np.nanmin(data_array[i]))/(np.nanmax(data_array[i]) - np.nanmin(data_array[i])) + min_val
+        data_norm.append(norm)
+    
+    return np.array(data_norm)
 
 
 def poly_fit(data_array, x_vals, degree = 2, plot=True, return_baseline=False):
