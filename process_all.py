@@ -11,28 +11,9 @@ from multiprocessing.dummy import Pool as ThreadPool
 # new code 
 import gued
 
-def azimuthal_avg_correct(args):
-    """Returns the azimuthal average of a diffraction image based on the radial distance of the x, y positions in the image."""
-    data, x, y = args
-    r_max=len(x)
-    I=np.empty(r_max)
-    for ri in range(r_max):
-        I_r=data[x[ri],y[ri]]
-        ave=np.nanmean(I_r)
-        sigma=np.nanstd(I_r)
-        I_r[np.abs(I_r-ave)>=5*sigma]=np.nan
-        I[ri]=np.nanmean(I_r)
-    return I
-
-def get_azimuthal_average(data,x,y):
-    """Runs the azimuthal average function in parallel for large data sets."""
-    p = ThreadPool(3)
-    I=p.map(azimuthal_avg_correct, [(data_i,x,y) for data_i in data]) 
-    return np.array(I)
-
 if __name__ == '__main__':
-    data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\Run\\*\\'
-    #data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180623\\Run\\'
+    #data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\Run\\*\\'
+    data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180623\\Run\\'
     run_path = "*\\*\\ANDOR1_*.tif"
 
 
@@ -56,10 +37,17 @@ if __name__ == '__main__':
 
     file_name = f"{exp_label}_{today}.h5"
     print(file_name)
-    group_name = "s1"
+    #group_name = "s1"
+    group_name = "s4"
 
-    data_sets = [[0, 225], [275, 400], [400,600], [600, 800], [800, 1000], [1000,1200], [1200,1400], [1400,1600], [1600, 1800], [1800,1990]]
-    #data_sets = [[0,200], [200, 400], [400,600], [600, 800], [800, 1000], [1000,1200], [1200, 1400], [1400, 1600], [1600, 1800], [1800, 2000]]
+    #center = [489, 464]
+    center = [571, 494]
+
+    #img_r_max = 460
+    img_r_max = 450
+
+    #data_sets = [[0, 225], [275, 400], [400,600], [600, 800], [800, 1000], [1000,1200], [1200,1400], [1400,1600], [1600, 1800], [1800,1990]]
+    data_sets = [[0,200], [200, 400], [400,600], [600, 800], [800, 1000], [1000,1200], [1200, 1400], [1400, 1600], [1600, 1800], [1800, 2000]]
 
     start = time.perf_counter()
 
@@ -89,8 +77,7 @@ if __name__ == '__main__':
         masked_data = gued.apply_mask(data_array, plot=False)
 
         print(f"Removing Radial Outliers for files {data_sets[i][0]} to {data_sets[i][1]}")
-        #center = [560, 500]
-        center = [489, 464]
+
         cleaned_data = []
         cleaned_data = gued.remove_radial_outliers_pool(masked_data, center, plot=False)
 
@@ -102,37 +89,9 @@ if __name__ == '__main__':
 
         data_array = clean_data
         del clean_data
-
-        X_CENTER = center[0]
-        Y_CENTER = center[1]
-        GRID_SIZE = 1024
-
-        pointer = np.empty((1024,1024))
-        for j in range(GRID_SIZE):
-            for k in range(GRID_SIZE):
-                pointer[j,k]=int(np.sqrt((j-X_CENTER)**2+(k-Y_CENTER)**2))
-        img_r_max = 460
-        x=[];y=[]
-        for ri in range(img_r_max):
-            [X_temp,Y_temp]=np.where(pointer==ri)
-            x.append(X_temp)
-            y.append(Y_temp)
-        print(r'max Q index is ' + str(img_r_max));
-        r_max=len(x)
-
-        #print(f"Getting Azimuthal Average for files {data_sets[i][0]} to {data_sets[i][1]}")
-        azi_data = get_azimuthal_average(data_array, x, y)
-
-        print(f"Normalizing Data for files {data_sets[i][0]} to {data_sets[i][1]}")
-        min_val = 50
-        max_val = 100
-        norm_data = gued.normalize_to_baseline(azi_data) 
-        del azi_data
-
-        s_cali = 0.026
-        #posi_0    = 154.405 # The reference T0
-        posi_0 = 108.61
-        s = np.arange(0,len(norm_data[0]))*s_cali # The Q axis
+        
+        print(f"Calculating the Azimuthal average and Normalizing for files {data_sets[i][0]} to {data_sets[i][1]}")
+        norm_data, norm_std = gued.get_azimuthal_average_pool(data_array, center, normalize=True, plot=True)
 
         print(f"Saving Data for files {data_sets[i][0]} to {data_sets[i][1]} as run number {i}")
         gued.save_data(file_name, group_name, i, norm_data, stage_positions)
