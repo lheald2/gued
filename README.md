@@ -59,9 +59,16 @@ experiments conducted at the MeV-UED facility at the Stanford Linear Accelerator
 
 The first step is to use `Set_up_Globals.ipynb` file to test and optimize the __global variables__ stored in `gued_globals.py` which need to be adjusted for each experiment. This notebook uses the average of all the data and plots examples to see if your variables are set properly. Once you feel good about the global variables, move on to the next step. 
 
-An example notebook named `Fast_Analysis.ipynb` should be run as the second step in the data processing. This notebook applies and plots all the above steps after having averaged based on the stage position associated with the data. This notebook will get you to the dI/I. 
+An example notebook named `Fast_Analysis.ipynb` should be run as the second step in the data processing. This notebook applies and plots all the above steps after having averaged based on the stage position associated with the data. This notebook will get you to the ΔI/I. 
 
 Once the global variables are set, it is possible to run all the functions above on a large data set using the `process_all.py` file. This file interatively processes images following the above steps (without averaging based on stage position) and saves the total scattering and stage positions to an h5 file. Running __2000__ images takes __~ 25 minutes__ on a personal laptop. 
+
+After processing all of the images and saving to an .h5 file, it can be useful to check drifts with respect to lab time. An example of tracking drifts in t0 with respect to labtime is done in the `T0_Analysis.ipynb` notebook. The data is broken up into groups and the rise time is fit to the different subsets of data to look for changes due to drifts during the data collection.
+
+Finally, after data has been thoroughly cleaned and processed, the .h5 file can be read into the `PDF_Generation.ipynb` notebook to convert the ΔI/I to the pair distribution function (PDF). Note: This notebook is still a work in progress.
+
+Another notebook that will likely be helpful is the `GUED_Simulations.ipynb` notebook which can be used to simulate scattering data from input structure files such as .xyz and .csv files. Additionally, can simulate time resolved diffraction patterns from trajectory files and vibrational .hess files generated through ORCA. 
+
 
 ## Acknowledgements: 
 Code was adapted from multiple sources including:  
