@@ -1758,6 +1758,41 @@ def save_data(file_name, group_name, run_number, azimuthal_data, stage_positions
     return
 
 
+def add_to_h5(file_name, group_name, var_name, var_data):
+    """
+    Appends a data set to a specified group in an h5 file. 
+    
+    ARGUMENTS:
+    
+    file_name (str):
+        name and path to h5 file you wish to append data to
+    group_name (str):
+        subgroup within the h5 data set that you wish to append data to
+    var_name (str):
+        name of data that you are appending i.e., "pdf" 
+    var_data (array):
+        array of data to add to the h5 file. 
+    """
+
+    # Open the HDF5 file in append mode
+    with h5py.File(file_name, 'a') as f:
+        # Check if the group exists
+        if group_name in f:
+            group = f[group_name]
+        else:
+            print(f"Error: Group '{group_name}' not found.")
+            return
+        
+        # Delete the existing dataset if it exists
+        if var_name in group:
+            print(f"Warning: Dataset '{var_name}' already exists in group '{group_name}'. It will be overwritten.")
+            del group[var_name]
+        
+        # Create the dataset within the group
+        group.create_dataset(var_name, data=var_data)
+        print(f"Variable '{var_name}' added to group '{group_name}' successfully.")
+
+
 def read_individual_run(file_name, group_name, run_number):
     """
     Allows you to read a specific run from an h5 file. 

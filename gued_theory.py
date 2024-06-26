@@ -352,7 +352,7 @@ def get_modified_coor_for_csv(coor_csv,atom_sum):
     return coor
 
 
-def get_I_atomic(coor, atom_sum, s_max=12):
+def get_I_atomic(coor, atom_sum, s_val=12):
     """
     Calculates the I_atomic scattering pattern for the molecule of interest. 
 
@@ -379,7 +379,16 @@ def get_I_atomic(coor, atom_sum, s_max=12):
 
     I_at_all = []
     s_angstrom = S_THEORY*1e-10 #in angstroms
-    s_new = np.linspace(0, s_max, 500)
+
+    
+    if isinstance(s_val, int):
+        s_new = np.linspace(0, s_val, 500)
+    elif isinstance(s_val, np.ndarray):
+        s_new = s_val
+    elif isinstance(s_val, list):
+        s_new = np.array(s_val)
+
+
     for i in range(atom_sum):
         I_atomic = []
         I_at = 0
@@ -397,7 +406,7 @@ def get_I_atomic(coor, atom_sum, s_max=12):
     return I_at, s_new
 
 
-def get_I_molecular(coor, atom_sum, s_max=12):
+def get_I_molecular(coor, atom_sum, s_val=12):
     """
     Calculates the I_molecular scattering pattern for the molecule of interest. 
 
@@ -424,10 +433,19 @@ def get_I_molecular(coor, atom_sum, s_max=12):
     x = np.array(coor[:, 1])
     y = np.array(coor[:, 2])
     z = np.array(coor[:, 3])
-    
+
+
+
+
     s_angstrom = S_THEORY * 1e-10 #convert to angstroms
     
-    s_new = np.linspace(0, s_max, 500)
+    if isinstance(s_val, int):
+        s_new = np.linspace(0, s_val, 500)
+    elif isinstance(s_val, np.ndarray):
+        s_new = s_val
+    elif isinstance(s_val, list):
+        s_new = np.array(s_val)
+
     I_mol = np.zeros(len(s_new))
     for i in range(atom_sum):
         for j in range(atom_sum): # Does each atom pair calculation twice
@@ -445,11 +463,12 @@ def get_I_molecular(coor, atom_sum, s_max=12):
                 I_mol[0]+=FORM_FACTORS[int(coor[i,4]),0]*FORM_FACTORS[int(coor[j,4]),0]
                 I_mol[1:len(s_new)]+=amps_new_i[1:len(s_new)]*amps_new_j[1:len(s_new)]*np.sin(
                     s_new[1:len(s_new)]*r_ij)/s_new[1:len(s_new)]/r_ij
+                
     
     return I_mol, s_new
 
 
-def get_I_from_xyz(coor, atom_sum, s_max=12):
+def get_I_from_xyz(coor, atom_sum, s_val=12):
     """
     Calculates the total scattering of the molecule of interest by using the functions get_I_atomic and get_I_molecular. 
     
@@ -477,67 +496,11 @@ def get_I_from_xyz(coor, atom_sum, s_max=12):
     s_new (array):
         s values related to I
     """
-    
-    I_at, s_new = get_I_atomic(coor, atom_sum, s_max)
-    I_mol, _ = get_I_molecular(coor, atom_sum, s_max)
+    I_at, s_new = get_I_atomic(coor, atom_sum, s_val)
+    I_mol, _ = get_I_molecular(coor, atom_sum, s_val)
     I = I_at + I_mol
 
     return I, I_at, I_mol, s_new
-
-
-def get_I_for_exp_from_mol_coor(s, s_exp, coor, atom_sum):
-    """
-    ARGUMENTS: 
-
-    f (ndarray):
-        form factors for all atoms
-    s (1d array):
-        s values read from the import_dcs function
-    s_exp (1d array):
-        s values corresponding to the experimental data
-    coor (ndarray):
-        coordinates for the molecule of interest
-    atom_sum (int):
-        total number of atoms in molecule
-
-    RETURNS:
-
-    I1 (1d array): 
-        total scattering intensity (I atomic + I molecular)
-    I_at1 (1d array): 
-        atomic scattering intensity
-    I_mol1 (1d array):
-        molecular scattering intensity
-    """
-
-    #todo rewrite with proper interpolation
-    # slightly different from the function get_I_from_mol_coor
-    # this function is to simulate I that matches the s from experiments
-    b = range(atom_sum)
-    Lm = 125  # Lm should be no larger than 138
-    I = np.zeros(Lm)
-    I_at = np.zeros(Lm)
-    I_mol = np.zeros(Lm)
-
-    for i in range(atom_sum):
-        I_at += FORM_FACTORS[int(coor[i, 4]), 0:Lm] * FORM_FACTORS[int(coor[i, 4]), 0:Lm]
-    for i in b:
-        for j in b:
-            if i != j:
-                r_ij = ((float(coor[i, 1]) - float(coor[j, 1])) ** 2 + (float(coor[i, 2]) - float(coor[j, 2])) ** 2 + (
-                            float(coor[i, 3]) - float(coor[j, 3])) ** 2) ** 0.5 * 1e-10
-                # distance between atom i and j
-                I_mol[0] += FORM_FACTORS[int(coor[i, 4]), 0] * FORM_FACTORS[int(coor[j, 4]), 0]
-                I_mol[1:Lm] += FORM_FACTORS[int(coor[i, 4]), 1:Lm] * FORM_FACTORS[int(coor[j, 4]), 1:Lm] * np.sin(s[1:Lm] * r_ij) / s[
-                                                                                                              1:Lm] / r_ij
-    I = I_at + I_mol
-    s0 = s[0:Lm] * 1e-10
-
-    I1 = make_interp_spline(s0, I)(s_exp)
-    I_at1 = make_interp_spline(s0, I_at)(s_exp)
-    I_mol1 = make_interp_spline(s0, I_mol)(s_exp)
-
-    return I1, I_at1, I_mol1
 
 
 def get_sM_and_PDF_from_I(I_at,I_mol,s,r_max,damp_const):
@@ -983,7 +946,7 @@ def dissoc_sim(path_mol, reactant, products, file_type, s_max=12, r_max=800, dam
     return dsM, s, dPDF, r
 
 
-def poly_fit(data_array, x_vals, return_baseline=False):
+def poly_fit(data_array, x_vals, degree = 2, plot=True, return_baseline=False):
     """
     Calculates a polynomial fit of the data_array with respect to the x_vals. 
 
@@ -1015,7 +978,7 @@ def poly_fit(data_array, x_vals, return_baseline=False):
         for i in range(len(data_array)):
             temp_data = np.copy(data_array[i])
             idx_nan = ~np.isnan(temp_data)
-            coeff = np.polyfit(x_vals[idx_nan],temp_data[idx_nan],2)
+            coeff = np.polyfit(x_vals[idx_nan],temp_data[idx_nan], degree)
             baseline = np.polyval(coeff,x_vals)
             baseline2d.append(baseline)
 
@@ -1025,12 +988,29 @@ def poly_fit(data_array, x_vals, return_baseline=False):
     elif len(data_array.shape) == 1:
         temp_data = data_array
         idx_nan = ~ np.isnan(temp_data)
-        coeff = np.polyfit(x_vals[idx_nan], temp_data[idx_nan], 2)
+        coeff = np.polyfit(x_vals[idx_nan], temp_data[idx_nan], degree)
         baseline2d = np.polyval(coeff, x_vals)
         
         corrected_data = data_array - baseline2d
     else:
         print("Data Array must be 1D or 2D array")
+
+    if plot == True:
+        plt.figure()
+        plt.subplot(1,2,1)
+        plt.plot(data_array[0])
+        plt.plot(baseline2d[0])
+        plt.xlabel("pixel")
+        plt.title("delta I/I original with fit line")
+
+        plt.subplot(1,2,2)
+        plt.plot(corrected_data[0])
+        plt.xlabel("pixel")
+        plt.title("delta I/I corrected")
+
+        plt.tight_layout()
+        plt.show()
+
     if return_baseline == True:
         return corrected_data, baseline2d
     else:
@@ -1226,7 +1206,7 @@ def fit_every_3_points(s0,I_0,s_exp):
         h=alpha1*(s3**c-s1**c)-s2**c+s1**c+alpha2*(s3**c-s2**c)-s3**c+s1**c
         
         c0=find_zeros(h,c)
-        
+        c_zero = 0.005 #temp for testing
         for j in c0:
             if abs(j)>0.001:
                 c_zero=j
@@ -1278,9 +1258,9 @@ def rescale_along_y_axis(fstandard,ftoscale):
     return ftoscale*scale,scale
 
 
-def retrieve_PDF(left,right,s_interval1,f,s000,s_max,coor,atom_sum,damp_const,r_max,I_exp):
+def retrieve_PDF(left,right,s_interval1,s_max,coor,atom_sum,damp_const,r_max,I_exp):
     s_exp=np.linspace(0,(len(I_exp)-1)*s_interval1,len(I_exp))
-    I,I_at,I_mol=get_I_for_exp_from_mol_coor(f,s000,s_exp,coor,atom_sum)
+    I,I_at,I_mol, _=get_I_from_xyz(coor,atom_sum, s_val=s_exp)
     I_exp1,s1,start=remove_nan_from_data(s_exp,I_exp)
     I_at1=I_at[start:]
     sM,PDF,r=get_sM_and_PDF_from_I(I_at,I_mol,s_exp,r_max,damp_const)
@@ -1302,7 +1282,7 @@ def retrieve_PDF(left,right,s_interval1,f,s000,s_max,coor,atom_sum,damp_const,r_
     sM_ret,PDF_awful,r=get_sM_and_PDF_from_I(I_at1,I_mol_ret_filted,s1,r_max,damp_const)
     sM_ret=sM_ret/sM_ret.max()
     
-    I1,I_at1,I_mol1,s11=get_I_from_xyz(f,s000,s_max,coor,atom_sum)
+    I1,I_at1,I_mol1,s11=get_I_from_xyz(coor,atom_sum, s_val=s_max)
     sM1,PDF1,r=get_sM_and_PDF_from_I(I_at1,I_mol1,s11,r_max,damp_const)
 
     sM_combined=np.empty(len(s_exp))
@@ -1380,10 +1360,10 @@ def retrieve_PDF(left,right,s_interval1,f,s000,s_max,coor,atom_sum,damp_const,r_
     return
 
 
-def sM_err(left,right,s_interval1,f,s000,s_max,coor,atom_sum,damp_const,r_max,I_exp):
-    s_exp=np.linspace(0,(len(I_exp)-1)*s_interval1,len(I_exp))
-    I,I_at,I_mol=get_I_for_exp_from_mol_coor(f,s000,s_exp,coor,atom_sum)
-    I_exp1,s1,start=remove_nan_from_data(s_exp,I_exp)
+def sM_err(left,right,s_interval1,s_max,coor,atom_sum,damp_const,r_max,I_exp):
+    s_exp = np.linspace(0,(len(I_exp)-1)*s_interval1,len(I_exp))
+    I,I_at,I_mol, _ = get_I_from_xyz(coor,atom_sum, s_val = s_exp)
+    I_exp1,s1,start = remove_nan_from_data(s_exp,I_exp)
     I_at1=I_at[start:]
     sM,PDF,r=get_sM_and_PDF_from_I(I_at,I_mol,s_exp,r_max,damp_const)
     s0=find_near_zeros(sM,s_exp)
@@ -1423,20 +1403,20 @@ def sM_err(left,right,s_interval1,f,s000,s_max,coor,atom_sum,damp_const,r_max,I_
     return r[0]
 
 
-def scan_s_calibration(scmin,scmax,left,right,f,s000,s_max,coor,atom_sum,damp_const,r_max,I_ground_state):
+def scan_s_calibration(scmin,scmax,left,right,s_max,coor,atom_sum,damp_const,r_max,I_ground_state):
     #uses sM_err function
     interval1=0.0002
     interval2=0.00002
     R1=np.empty(int((scmax-scmin)/interval1))
     R2=np.empty(int(2*interval1/interval2))
     for i in range(int((scmax-scmin)/interval1)):
-        R1[i]=sM_err(left,right,scmin+i*interval1,f,s000,s_max,coor,atom_sum,damp_const,r_max,I_ground_state)
+        R1[i]=sM_err(left,right,scmin+i*interval1,s_max,coor,atom_sum,damp_const,r_max,I_ground_state)
 
     a=np.where(R1==R1.max())
     s_calibration1=scmin+interval1*int(a[0])
 
     for i in range(int(2*interval1/interval2)):
-        R2[i]=sM_err(left,right,s_calibration1-interval1+i*interval2,f,s000,s_max,coor,atom_sum,damp_const,r_max,I_ground_state)
+        R2[i]=sM_err(left,right,s_calibration1-interval1+i*interval2,s_max,coor,atom_sum,damp_const,r_max,I_ground_state)
 
     x=np.linspace(-2,2,5)
     h=np.exp(-x**2/200)
@@ -1450,7 +1430,7 @@ def scan_s_calibration(scmin,scmax,left,right,f,s000,s_max,coor,atom_sum,damp_co
     return s_calibration2
 
 
-def correct_offset(dI, x=300):
+def correct_offset(dI, x=300, plot=False):
     #dI = (I_norm - I_ref)
     corrected = []
     for i in range(len(dI)):
@@ -1459,24 +1439,57 @@ def correct_offset(dI, x=300):
         corrected.append(correct)
         
     corrected = np.array(corrected)
-    plt.figure()
-    plt.plot(dI[-1][300:], label = "original")
-    plt.plot(corrected[-1][300:], label="corrected")
-    plt.legend()
-    plt.title("Corrected data")
-    plt.show()
+
+    if plot==True:
+        plt.figure()
+        plt.plot(dI[-1][300:], label = "original")
+        plt.plot(corrected[-1][300:], label="corrected")
+        plt.legend()
+        plt.title("Corrected data")
+        plt.show()
+
     return corrected
 
 
-def get_sM(f, s000, s_exp, coor, atom_sum, dI):
+def get_exp_sM_PDF(coor, atom_sum, s_exp, dI, polyfit=True, plot=False):
+    """
+    Calculates the sM and PDF for experimental dI. First, any zero offset at high s is corrected for then the I(atomic) is calculated for
+    the appropriate s coordinates relating to the experiment. Then calculates sM and fills in nan values before calculating
+    the PDF from the I(atomic). See papers for more details.
+    
+    ARGUMENTS:
+    
+    coor (array):
+        array of xyz positions for each atom in the molecule 
+    atom_sum (int): 
+        number of atoms in the molecule
+    s_exp (array):
+        1D array of s values for the experimental data
+    dI (array):
+        2D array of dI for each time step in the experiment
+    
+    OPTIONAL ARGUMENTS:
+    
+    polyfit (boolean):
+        default set to True. When true, applies a polynomial fit to the data and subtracts off the background using the poly_fit function
+    plot (boolean):
+        default set to False. When true, plots a 2d image (without axes) of the dPDF
+    """
+
+
+    if polyfit == True:
+        dI = poly_fit(dI, s_exp)
+    
+    dI = correct_offset(dI) # adjust for zero offset
     I_at_all = []
-    s000 = s000*1e-10
+    s_angstrom = S_THEORY*1e-10
+
     for i in range(atom_sum):
         I_atomic = []
         I_at = 0
-        amps = f[int(coor[i,4])]
+        amps = FORM_FACTORS[int(coor[i,4])]
         #print(amps)
-        interp_amps = interp.interp1d(s000[0:125], amps[0:125])
+        interp_amps = interp.interp1d(s_angstrom[0:125], amps[0:125])
         amps_new = interp_amps(s_exp)
         for k in range(len(amps_new)):
             f_new = amps_new[k]
@@ -1493,15 +1506,10 @@ def get_sM(f, s000, s_exp, coor, atom_sum, dI):
         sM_temp[0:25] = np.arange(0,25)*slope
         sM_new.append(sM_temp)
 
-    sM = np.array(sM_new)/np.nanmax(np.array(sM_new))
-    return(sM)
+    sM = np.array(sM_new)/np.nanmax(np.array(sM_new))  # Normalized?
 
-
-def get_exp_PDF(sM, s_exp, r_max, s_cali):
-    smax=np.max(s_exp);
-    s1=len(sM);
-    ds=s_cali; # step size of s 
-    print(ds)
+    ds= s_exp[1]-s_exp[0]  # step size of s 
+    print(f"s calibration value is {ds}")
     rmax=10; # in angstroms
     r=np.linspace(0,rmax,np.round(1000));
 
@@ -1517,5 +1525,15 @@ def get_exp_PDF(sM, s_exp, r_max, s_cali):
         #print(len(fr_temp))
         pdf_exp.append(fr_temp)
         #     % Calculating fourier transform of theory
+    
     pdf_exp = np.array(pdf_exp)
-    return pdf_exp, r
+
+    if plot == True:
+        plt.figure()
+        plt.pcolor(pdf_exp)
+        plt.colorbar()
+        plt.show()
+
+
+    return sM, pdf_exp, r
+
