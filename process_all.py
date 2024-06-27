@@ -5,9 +5,6 @@ import matplotlib.pyplot as plt
 from datetime import date
 import time
 
-#multiprocessing
-from multiprocessing.dummy import Pool as ThreadPool
-
 # new code 
 import gued
 

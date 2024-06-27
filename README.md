@@ -8,7 +8,7 @@ The goal is to create this package to contain all the necessary functions for an
 experiments conducted at the MeV-UED facility at the Stanford Linear Accelerator).
 
 ### Current Status:
-  Able to process all data to get the total scattering and dI/I
+  Able to process all data to get the total scattering and ΔI/I
   Working on getting the pair distribution function from the total scattering. Updates are posted often
 
 ## Current Functionality
