@@ -6,7 +6,7 @@ sys.path.append('packages')
 import warnings
 from scipy import signal
 import scipy.interpolate as interp
-from scipy.interpolate import make_interp_spline
+from scipy.ndimage import gaussian_filter
 from scipy.optimize import curve_fit
 import scipy.stats
 from PIL import Image
@@ -152,9 +152,10 @@ def import_DCS(max_at_no=55):
 FORM_FACTORS = import_DCS()
 S_THEORY = import_s()
 
-def load_static_mol_coor(path_mol, mol_name, file_type):
-    """ Reads in either a .csv or .xyz file containing moleculear coordinates and adds a column containing the atomic number for each atom in 
-    the molecule. Errors are thrown if an improper file type is chosen or if the .xyz or .csv file needs further formatting.
+def load_molecular_structure(path_mol, mol_name, file_type):
+    """ Reads in either a .csv or .xyz file containing moleculear coordinates and adds a column containing the atomic number using the 
+    hidden function _get_modified_coor for each atom in the molecule. When reading in an .xyz file runs the hidden function _load_xyz. 
+    Errors are thrown if an improper file type is chosen or if the .xyz or .csv file needs further formatting.
     
     ARGUMENTS:
     
@@ -177,8 +178,8 @@ def load_static_mol_coor(path_mol, mol_name, file_type):
     filename=path_mol + mol_name + file_type
 
     if file_type=='.xyz':
-        coor_xyz, atom_sum = load_xyz(filename)
-        coor = get_modified_coor_for_xyz(coor_xyz,atom_sum)
+        coor_xyz, atom_sum = _load_xyz(filename)
+        coor = _get_modified_coor(coor_xyz, atom_sum, file_type)
         
     if file_type =='.csv':
         mol_filename = mol_name+'.csv'
@@ -186,7 +187,7 @@ def load_static_mol_coor(path_mol, mol_name, file_type):
         coor = np.array(coor_M)
         num = np.array(coor[:,3])
         atom_sum = int(len(num))
-        coor = get_modified_coor_for_csv(coor,atom_sum)
+        coor = _get_modified_coor(coor, atom_sum, file_type)
 
     elif file_type!='.csv' and file_type!='.xyz':
         print('error! Please type in the right molecular coordinate file type, .xyz or .csv')
@@ -194,7 +195,7 @@ def load_static_mol_coor(path_mol, mol_name, file_type):
     return coor,atom_sum
 
 
-def load_xyz(xyz_file):
+def _load_xyz(xyz_file):
     """
     Reads in an .xyz generated from programs such as Gaussian or ORCA.
     
@@ -292,7 +293,7 @@ def load_freq_xyz(path_mol, mol_name, file_type):
     return re, atom_sum, time
 
 
-def get_modified_coor_for_xyz(re,atom_sum):
+def _get_modified_coor(coor, atom_sum, file_type):
     """ 
     Appends a column of atomic numbers to the coordinate array read from the .xyz file
     
@@ -310,47 +311,22 @@ def get_modified_coor_for_xyz(re,atom_sum):
         N x 5 array where N = # of atoms. Column 0 contains the atomic symbol, columns 1, 2, and 3 contain x, y, and z coordinates
         and column 4 contains the atomic number. 
     """
-
-    atom_num=[0 for i in range(atom_sum)]
-    for i in range(atom_sum):
-        atom_num[i]=sym_to_no(re[i][0])
-
-    atom_num=np.array(atom_num)
-    atom_num=atom_num[:,np.newaxis]
-    coor=np.hstack((re,atom_num))
-
-    return coor
-
-
-def get_modified_coor_for_csv(coor_csv,atom_sum):
-    """ 
-    Appends a column of atomic numbers to the coordinate array read from the .csv file
+    if file_type == '.xyz':
+        atom_num=[0 for i in range(atom_sum)]
+        for i in range(atom_sum):
+            atom_num[i]=sym_to_no(coor[i][0])
     
-    ARGUMENTS: 
-
-    coor_csv (array):
-        coordinate array of N (# of atoms) x 4 shape with column 0 containing atomic symbol, and columns 1, 2, and 3 containing x,
-        y, and z coordinates
-    atom_sum (int):
-        total number of atoms in the molecule
-    
-    RETURNS: 
-
-    coor (array):
-        N x 5 array where N = # of atoms. Column 0 contains the atomic symbol, columns 1, 2, and 3 contain x, y, and z coordinates
-        and column 4 contains the atomic number. 
-    """
-
-    atom_num=[0 for i in range(atom_sum)]
-    for i in range(atom_sum):
-        atom_num[i]=sym_to_no(coor_csv[i,0])
+    if file_type == '.csv':
+        atom_num=[0 for i in range(atom_sum)]
+        for i in range(atom_sum):
+            atom_num[i]=sym_to_no(coor[i,0])
             
     atom_num=np.array(atom_num)
     atom_num=atom_num[:,np.newaxis]
-    coor=np.hstack((coor_csv,atom_num))
+    coor=np.hstack((coor, atom_num))
 
     return coor
-
+    
 
 def get_I_atomic(coor, atom_sum, s_val=12):
     """
@@ -660,7 +636,7 @@ def load_time_evolving_xyz(path_mol, mol_name, file_type):
         n = 0
     print(len(coor_txyz[0][0]))
     for i in range(time_count):
-        coor1 = get_modified_coor_for_xyz(coor_txyz[i][:][:], atom_sum)
+        coor1 = _get_modified_coor(coor_txyz[i][:][:], atom_sum, file_type)
         coor_txyz[i] = coor1
 
     return np.array(coor_txyz), atom_sum, time
@@ -668,7 +644,9 @@ def load_time_evolving_xyz(path_mol, mol_name, file_type):
 
 def static_sim(path_mol, mol_name, file_type, s_max = 12, r_max = 800, damp_const = 33, plot=True, return_data = False):
     """
-    Calculates the static scattering of a molecule based on the structure. 
+    Calculates the static scattering of a molecule based on the structure. First, reads in the molecular structure using 
+    load_molecular_structure then calculates the I atomic and I molecular using get_I_from_xyz. Then, using the I atomic and I molecular,
+    calculated the sM and PDF using the get_sM_and_PDF_from_I function.
     
     ARGUMENTS:
 
@@ -694,7 +672,7 @@ def static_sim(path_mol, mol_name, file_type, s_max = 12, r_max = 800, damp_cons
         
     """
 
-    coor, atom_sum  = load_static_mol_coor(path_mol,mol_name,file_type)
+    coor, atom_sum  = load_molecular_structure(path_mol,mol_name,file_type)
     _, I_at, I_mol, s_new = get_I_from_xyz(coor, atom_sum, s_max)
     sM, PDF, r_new = get_sM_and_PDF_from_I(I_at, I_mol, s_new, r_max, damp_const)
 
@@ -727,6 +705,7 @@ def static_sim(path_mol, mol_name, file_type, s_max = 12, r_max = 800, damp_cons
 def trajectory_sim(path_mol, mol_name, file_type,s_max=12):
     """ 
     Calculates the scattering and plots results of a trajectory simulation with a series of xyz coordinates and corresponding time steps.
+    Uses the functions load_time_evolving_xyz, get_I_from_xyz, get_2d_matrix, and plot_delay_simulation_with_conv. 
     
     ARGUMENTS:
     
@@ -778,7 +757,8 @@ def trajectory_sim(path_mol, mol_name, file_type,s_max=12):
 
 def freq_sim(path_mol, tra_mol_name, file_type, s_max=12, evolutions=10, r_max=800, damp_const=33, plot=True):
     """
-    Calculates the delta I/I and PDF for a frequency simulation done by ORCA and plots a set mumber of evolutions of the vibrational mode.
+    Calculates the delta I/I and PDF for a frequency simulation done by ORCA and saved as a .hess file. Plots a set mumber of evolutions 
+    of the vibrational mode. Uses functions load_freq_xyz, get_I_from_xyz, and get_sM_and_PDF_from_I
     
     ARGUMENTS:
 
@@ -863,6 +843,7 @@ def freq_sim(path_mol, tra_mol_name, file_type, s_max=12, evolutions=10, r_max=8
 def dissoc_sim(path_mol, reactant, products, file_type, s_max=12, r_max=800, damp_const=33, plot=False):
     """
     Calculates the diffraction pattern of a dissociation reaction (or just any kind of structural change) from 2 or more structure files.
+    Uses funcitons load_molecular_structure, get_I_from_xyz, and get_sM_and_PDF_from_I
     
     ARGUMENTS:
 
@@ -899,7 +880,7 @@ def dissoc_sim(path_mol, reactant, products, file_type, s_max=12, r_max=800, dam
     r (1d array):
         corresponding pair distances
     """
-    coor0, atom_sum0 = load_static_mol_coor(path_mol, reactant, file_type)
+    coor0, atom_sum0 = load_molecular_structure(path_mol, reactant, file_type)
     I0, I0_at,I0_mol,s = get_I_from_xyz(coor0,atom_sum0, s_max)
     sM0, pdf0, r = get_sM_and_PDF_from_I(I0_at,I0_mol,s,r_max,damp_const)
     
@@ -909,7 +890,7 @@ def dissoc_sim(path_mol, reactant, products, file_type, s_max=12, r_max=800, dam
     pdf_prods = []
     for i in range(len(products)):
         frag_name = str(products[i])
-        coor, atom_sum = load_static_mol_coor(path_mol, frag_name, file_type)
+        coor, atom_sum = load_molecular_structure(path_mol, frag_name, file_type)
         I,I_at,I_mol,s = get_I_from_xyz(coor, atom_sum, s_max)
         I_prods.append(I)
         sM,pdf,r = get_sM_and_PDF_from_I(I0_at,I_mol,s,r_max,damp_const)
@@ -984,6 +965,21 @@ def poly_fit(data_array, x_vals, degree = 2, plot=True, return_baseline=False):
 
         baseline2d = np.array(baseline2d)
         corrected_data = data_array - baseline2d
+        if plot == True:
+            plt.figure()
+            plt.subplot(1,2,1)
+            plt.plot(data_array[0])
+            plt.plot(baseline2d[0])
+            plt.xlabel("pixel")
+            plt.title("delta I/I original with fit line")
+
+            plt.subplot(1,2,2)
+            plt.plot(corrected_data[0])
+            plt.xlabel("pixel")
+            plt.title("delta I/I corrected")
+
+            plt.tight_layout()
+            plt.show()
         
     elif len(data_array.shape) == 1:
         temp_data = data_array
@@ -992,24 +988,24 @@ def poly_fit(data_array, x_vals, degree = 2, plot=True, return_baseline=False):
         baseline2d = np.polyval(coeff, x_vals)
         
         corrected_data = data_array - baseline2d
+
+        if plot == True:
+            plt.figure()
+            plt.subplot(1,2,1)
+            plt.plot(data_array)
+            plt.plot(baseline2d)
+            plt.xlabel("pixel")
+            plt.title("delta I/I original with fit line")
+
+            plt.subplot(1,2,2)
+            plt.plot(corrected_data)
+            plt.xlabel("pixel")
+            plt.title("delta I/I corrected")
+
+            plt.tight_layout()
+            plt.show()
     else:
         print("Data Array must be 1D or 2D array")
-
-    if plot == True:
-        plt.figure()
-        plt.subplot(1,2,1)
-        plt.plot(data_array[0])
-        plt.plot(baseline2d[0])
-        plt.xlabel("pixel")
-        plt.title("delta I/I original with fit line")
-
-        plt.subplot(1,2,2)
-        plt.plot(corrected_data[0])
-        plt.xlabel("pixel")
-        plt.title("delta I/I corrected")
-
-        plt.tight_layout()
-        plt.show()
 
     if return_baseline == True:
         return corrected_data, baseline2d
@@ -1017,34 +1013,364 @@ def poly_fit(data_array, x_vals, degree = 2, plot=True, return_baseline=False):
         return corrected_data
 
 
-def fit_high_s(data_array, x_vals, s_range, return_baseline=False):
+def fit_high_s(data_array, x_vals, s_range=300, return_baseline=False, plot=False):
+    """ 
+    Calculates a linear fit to the high s values and subtracts the high s data from that line based on the slope. 
+    
+    ARGUMENTS:
+    
+    data_array (array):
+        1D or 2D array
+    x_vals (1D array):
+        x_vals relating to the data_array (i.e., s_exp)
+    
+    OPTIONAL ARGUMENTS:
+    
+    s_range (int):
+        Default set to 300. Index of the lowest s value to fit. 
+    return_baseline (boolean):
+        Default set to False. When true, returns the calculated baseline along with the corrected array
+    plot (boolean):
+        Default set to False. When true, plots a figure showing the baseline with respect to the original data and the new data.
+        
+    RETURNS:
+    
+    corrected_data (array):
+        array matching the size of the input data_array with the baseline subtracted
+    baseline (array):
+        calculated baselines. Only returned when return_baseline==True"""
+
+    data_fix = data_array
     if len(data_array.shape) == 2:
         corrected_data = []
         baseline = []
         for i in range(len(data_array)):
             temp_data = data_array[i]
-            coeff = np.polyfit(x_vals[s_range], temp_data[s_range], 2)
-            line = np.polyval(coeff, x_vals[s_range])
+            coeff = np.polyfit(x_vals[s_range:], temp_data[s_range:], 1)
+            line = np.polyval(coeff, x_vals[s_range:])
             baseline.append(line)
-            data_array[i, s_range] = temp_data[s_range] - line
-            corrected_data.append(data_array[i])
+            data_fix[i, s_range:] = temp_data[s_range:] - line
+            corrected_data.append(data_fix[i])
+        
+        if plot==True:
+            plt.figure()
+            plt.subplot(2,1,1)
+            plt.plot(x_vals, data_array[0])
+            plt.plot(x_vals[s_range:], baseline[0])
+            plt.title("Original Data with calculated Baseline")
+            
+            plt.subplot(2,1,2)
+            plt.plot(corrected_data[0])
+            plt.title("Baseline Subtracted Data")
+            plt.show()
+
             
     elif len(data_array.shape) == 1:
-        coeff = np.polyfit(x_vals[s_range], data_array[s_range], 1)
-        baseline = np.polyval(coeff, x_vals)
-        
-        corrected_data = data_array - baseline
+        coeff = np.polyfit(x_vals[s_range:], data_array[s_range:], 1)
+        baseline = np.polyval(coeff, x_vals[s_range:])
+        data_fix[s_range:] = data_array[s_range:] - baseline
+        corrected_data = data_fix
+    
+        if plot==True:
+            plt.figure()
+            plt.subplot(2,1,1)
+            plt.plot(x_vals, data_array)
+            plt.plot(x_vals[s_range:], baseline)
+            plt.title("Original Data with calculated Baseline")
+            
+            plt.subplot(2,1,2)
+            plt.plot(corrected_data)
+            plt.title("Baseline Subtracted Data")
+            plt.show()
     else:
         print("Data Array must be 1D or 2D array")
     
     corrected_data= np.array(corrected_data)
-    
+
     if return_baseline == True:
         return corrected_data, baseline
     else:
         return corrected_data
     
 
+def power_fit(data_array, x_vals, return_baseline = False, plot=False):
+    """
+    Fits the input data to a power function and subracts off the baseline (fit) to flatten data along zero axis. 
+    
+    ARGUMENTS:
+
+    data_array (array):
+        A 1D or 2D data array to be used for finding the power fit
+    x_vals (1D array):
+        x values associated with the data_array
+    
+    OPTIONAL ARGUMENTS:
+    
+    return_baseline (boolean):
+        Default set to False. When true, returns both the corrected data and the calculated baselines
+    plot (boolean):
+        Default set to False. When true, plots and example of the original data with the calculated baseline and the corrected data
+
+    RETURNS:
+
+    corrected_data (array):
+        Array of the same shape as input data_array with the calculated baseline subtracted off
+    baseline (array):
+        Array of the same shape as input data_array containing the calculated baselines (fits) for each data set. Only returned if 
+        return_baseline == True
+    """
+    # Define power function
+    def power_function(x, a, b):
+        return a * np.power(x, b)
+
+    # Perform the curve fitting
+    if len(data_array.shape)==2:
+        baseline = []
+        for i in range(len(data_array)):
+            params, _ = curve_fit(power_function, x_vals, data_array[i])
+            a, b = params
+            fit = power_function(x_vals, a, b)
+            baseline.append(fit)
+        baseline = np.array(baseline)
+        corrected_data = data_array-baseline
+
+        if plot == True:
+            plt.figure()
+            plt.subplot(1,2,1)
+            plt.plot(data_array[0])
+            plt.plot(baseline[0])
+            plt.xlabel("pixel")
+            plt.title("delta I/I original with fit line")
+
+            plt.subplot(1,2,2)
+            plt.plot(corrected_data[0])
+            plt.xlabel("pixel")
+            plt.title("delta I/I corrected")
+
+            plt.tight_layout()
+            plt.show()
+
+    elif len(data_array.shape) == 1:
+        params, _ = curve_fit(power_function, x_vals, data_array)
+        a, b = params
+        baseline = power_function(x_vals, a, b)
+        corrected_data = data_array-baseline
+
+        if plot == True:
+            plt.figure()
+            plt.subplot(1,2,1)
+            plt.plot(data_array)
+            plt.plot(baseline)
+            plt.xlabel("pixel")
+            plt.title("delta I/I original with fit line")
+
+            plt.subplot(1,2,2)
+            plt.plot(corrected_data)
+            plt.xlabel("pixel")
+            plt.title("delta I/I corrected")
+
+            plt.tight_layout()
+            plt.show()
+
+    else:
+        print("Please provide an array of data with a max shape length of 2")
+
+    if return_baseline == True:
+        return corrected_data, baseline
+    
+    else:
+        return corrected_data
+
+
+def bandpass_filter(data_array, ds, min_freq=0.001, max_freq=5, order = 4, plot=False):
+    """
+    Applies a bandpass filter to the input data to get rid of noise based on the minimum and maximum frequency using the scipy.signal.butter
+    function. Min and Max frequencies can be estimated by the inverse of the bond lengths..?
+    
+    ARGUMENTS:
+
+    data_array (array):
+        1D or 2D array of data which will be bandpass filtered
+    ds (float):
+        s calibration value (or another value representing sampling rate)
+
+    OPTIONAL ARGUMENTS:
+
+    min_freq (float > 0):
+        Default set to 0.001. Minimum value in the bandpass filter.
+    max_freq (float > min_freq):
+        Default set to 5. Maximum value for the bandpass filter.
+    order (int):
+        Default set to 4. Order of the butter bandpass filter. Higher-order filters will have a sharper cutoff but may introduce more 
+        ripple or distortion in the passband. Lower-order filters will have a gentler transition and may be more stable.
+    plot (boolean):
+        Default set to False. When true, plots before and after filtering
+
+    RETURNS:
+    
+    filtered_data (array):
+        Array with the same shape as the input data_array with the bandpass filter applied. 
+    """
+    fs = 1 / ds
+    nyquist = 0.5 * fs
+    low = min_freq/nyquist
+    high = max_freq/nyquist
+
+    # Set up filter
+    b, a = signal.butter(order, [low, high], btype='band')
+
+    if len(data_array.shape)==2:
+        filtered_data = []
+        for i in range(len(data_array)):
+            filtered_temp = signal.filtfilt(b, a, data_array[i])
+            filtered_data.append(filtered_temp)
+        filtered_data = np.array(filtered_data)
+
+        if plot == True:
+            plt.figure()
+            plt.subplot(2,1,1)
+            plt.plot(data_array[0])
+            plt.title("Original Data")
+
+            plt.subplot(2,1,2)
+            plt.plot(filtered_data[0])
+            plt.title("Bandpass Filtered Data")
+            plt.tight_layout()
+            plt.show()
+            
+    elif len(data_array.shape)==1:
+        filtered_data = signal.filtfilt(b, a, data_array)
+
+        if plot == True:
+            plt.figure()
+            plt.subplot(2,1,1)
+            plt.plot(data_array)
+            plt.title("Original Data")
+
+            plt.subplot(2,1,2)
+            plt.plot(filtered_data)
+            plt.title("Bandpass filtered Data")
+            plt.tight_layout()
+            plt.show()
+
+    return filtered_data
+    
+
+def get_exp_sM_PDF(coor, atom_sum, s_exp, dI, freq_filter=False, polyfit=False, degree=2, gauss_filter=False, sigma=1, 
+                   powerfit = False, plot=False):
+    """
+    Calculates the sM and PDF for experimental dI. First, any zero offset at high s is corrected for then the I(atomic) is calculated for
+    the appropriate s coordinates relating to the experiment. Then calculates sM and fills in nan values before calculating
+    the PDF from the I(atomic). See papers for more details.
+    
+    ARGUMENTS:
+    
+    coor (array):
+        array of xyz positions for each atom in the molecule 
+    atom_sum (int): 
+        number of atoms in the molecule
+    s_exp (array):
+        1D array of s values for the experimental data
+    dI (array):
+        2D array of dI for each time step in the experiment
+    
+    OPTIONAL ARGUMENTS:
+    
+    freq_filter (boolean):
+        Default set to False. When true, applies a bandpass filter to the sM to eliminate high frequency noise.
+    polyfit (boolean):
+        default set to False. When true, applies a polynomial fit to the sM data and subtracts off the background using the poly_fit function
+    degree (int):
+        Default is set to 2. Degree of the polynomial function used to fit the data
+    gauss_filter (boolean):
+        Default is set to False. When true, applies a gaussian filter to the sM
+    sigma (float):
+        Default set to 1.0. Width of the gaussian filter.
+    powerfit (boolean):
+        Default set to False. When true, fits the sM to a power function of a*x**b and subtracts the baseline.
+    plot (boolean):
+        default set to False. When true, plots a 2d image (without axes) of the dPDF
+    
+    RETURNS:
+
+    sM (2D array):
+        Calculated delta sM of the input dI
+    pdf_exp (2D array):
+        Calculated delta pair distribution function
+    r (1D array):
+        radial distances associated with the PDF
+    """
+
+    I_at_all = []
+    s_angstrom = S_THEORY*1e-10
+    ds= s_exp[1]-s_exp[0]  # step size of s 
+
+    for i in range(atom_sum):
+        I_atomic = []
+        I_at = 0
+        amps = FORM_FACTORS[int(coor[i,4])]
+        #print(amps)
+        interp_amps = interp.interp1d(s_angstrom[0:125], amps[0:125])
+        amps_new = interp_amps(s_exp)
+        for k in range(len(amps_new)):
+            f_new = amps_new[k]
+            I_at = np.abs(f_new)**2
+            I_atomic.append(float(I_at))
+        I_at_all.append(I_atomic)
+    I_at = sum(np.array(I_at_all))
+    
+    sM_new = []   
+    # add numbers for nan values           
+    for i in range(len(dI)):
+        nan_num = sum(np.isnan(dI[i]))
+        sM_temp = s_exp*(dI[i])/I_at
+        temp_mean = np.nanmean(sM_temp[nan_num:nan_num+5])
+        slope = temp_mean/25
+        sM_temp[0:nan_num] = np.arange(0,nan_num)*slope
+        sM_new.append(sM_temp)
+    sM = np.array(sM_new)/np.nanmax(np.array(sM_new))  # Normalized?
+    
+    if freq_filter == True:
+        sM = bandpass_filter(sM, ds)
+    if polyfit == True:
+        sM = poly_fit(sM, s_exp, degree=degree, plot=True)
+    if gauss_filter == True:
+        sM = gaussian_filter(sM, sigma=sigma)
+    if powerfit == True:
+        sM = power_fit(sM, s_exp, plot=True)
+
+    print(f"s calibration value is {ds}")
+    rmax=10; # in angstroms
+    r=np.linspace(0,rmax,np.round(1000))
+    damp_const = np.log(0.05)/(-1 * (np.max(s_exp)**2))
+    print(f"1/alpha value for damping constant is {1/damp_const}")
+
+    pdf_exp = []
+    for i in range(len(sM)):
+        sM_new=sM[i]*np.exp(-ds*(s_exp**2))
+        #print(len(sM_new))
+        fr_temp = []
+        for j in range(len(r)):
+            fr=np.nansum(sM_new*np.sin(r[j]*s_exp))*ds*np.exp(-1 * s_exp[i]**2 * damp_const)
+            fr_temp.append(fr)
+        fr_temp = np.array(fr_temp)
+        #print(len(fr_temp))
+        pdf_exp.append(fr_temp)
+        #     % Calculating fourier transform of theory
+    
+    pdf_exp = np.array(pdf_exp)
+
+    if plot == True:
+        plt.figure()
+        plt.pcolor(pdf_exp)
+        plt.colorbar()
+        plt.show()
+
+
+    return sM, pdf_exp, r   
+
+
+# written by SLAC People
 def remove_nan_from_data(s_exp,I_exp):
     #this function is to cut off nans in the experimental data
     start=0 #the parameter start reveals the end of nans
@@ -1089,15 +1415,6 @@ def get_3d_matrix(x, y, z):
             for k in range(z):
                 matrix3d[i][j].append(0)
     return matrix3d
-
-
-def high_freq_filter(cutoff_freq,s_interval,data):
-    fs=1/s_interval
-    nyq=0.5*fs
-    high=cutoff_freq/nyq
-    b,a=signal.butter(5,high,btype='high',analog=False)
-    filted_data = signal.filtfilt(b,a,data)
-    return filted_data
 
 
 def low_freq_filter(cutoff_freq,s_interval,data):
@@ -1428,112 +1745,3 @@ def scan_s_calibration(scmin,scmax,left,right,s_max,coor,atom_sum,damp_const,r_m
     print('s_calibration:',s_calibration2,'angs^-1/pixel')
     #print('pearson_r:',R2[int(b[0])+2])
     return s_calibration2
-
-
-def correct_offset(dI, x=300, plot=False):
-    #dI = (I_norm - I_ref)
-    corrected = []
-    for i in range(len(dI)):
-        ends = np.nanmean(dI[i][x:])
-        correct = dI[i]- ends
-        corrected.append(correct)
-        
-    corrected = np.array(corrected)
-
-    if plot==True:
-        plt.figure()
-        plt.plot(dI[-1][300:], label = "original")
-        plt.plot(corrected[-1][300:], label="corrected")
-        plt.legend()
-        plt.title("Corrected data")
-        plt.show()
-
-    return corrected
-
-
-def get_exp_sM_PDF(coor, atom_sum, s_exp, dI, polyfit=True, plot=False):
-    """
-    Calculates the sM and PDF for experimental dI. First, any zero offset at high s is corrected for then the I(atomic) is calculated for
-    the appropriate s coordinates relating to the experiment. Then calculates sM and fills in nan values before calculating
-    the PDF from the I(atomic). See papers for more details.
-    
-    ARGUMENTS:
-    
-    coor (array):
-        array of xyz positions for each atom in the molecule 
-    atom_sum (int): 
-        number of atoms in the molecule
-    s_exp (array):
-        1D array of s values for the experimental data
-    dI (array):
-        2D array of dI for each time step in the experiment
-    
-    OPTIONAL ARGUMENTS:
-    
-    polyfit (boolean):
-        default set to True. When true, applies a polynomial fit to the data and subtracts off the background using the poly_fit function
-    plot (boolean):
-        default set to False. When true, plots a 2d image (without axes) of the dPDF
-    """
-
-
-    if polyfit == True:
-        dI = poly_fit(dI, s_exp)
-    
-    dI = correct_offset(dI) # adjust for zero offset
-    I_at_all = []
-    s_angstrom = S_THEORY*1e-10
-
-    for i in range(atom_sum):
-        I_atomic = []
-        I_at = 0
-        amps = FORM_FACTORS[int(coor[i,4])]
-        #print(amps)
-        interp_amps = interp.interp1d(s_angstrom[0:125], amps[0:125])
-        amps_new = interp_amps(s_exp)
-        for k in range(len(amps_new)):
-            f_new = amps_new[k]
-            I_at = np.abs(f_new)**2
-            I_atomic.append(float(I_at))
-        I_at_all.append(I_atomic)
-    I_at = sum(np.array(I_at_all))
-    
-    sM_new = []              
-    for i in range(len(dI)):
-        sM_temp = s_exp*(dI[i])/I_at
-        temp_mean = np.nanmean(sM_temp[25:30])
-        slope = temp_mean/25
-        sM_temp[0:25] = np.arange(0,25)*slope
-        sM_new.append(sM_temp)
-
-    sM = np.array(sM_new)/np.nanmax(np.array(sM_new))  # Normalized?
-
-    ds= s_exp[1]-s_exp[0]  # step size of s 
-    print(f"s calibration value is {ds}")
-    rmax=10; # in angstroms
-    r=np.linspace(0,rmax,np.round(1000));
-
-    pdf_exp = []
-    for i in range(len(sM)):
-        sM_new=sM[i]*np.exp(-ds*(s_exp**2));
-        #print(len(sM_new))
-        fr_temp = []
-        for j in range(len(r)):
-            fr=np.nansum(sM_new*np.sin(r[j]*s_exp))*ds
-            fr_temp.append(fr)
-        fr_temp = np.array(fr_temp)
-        #print(len(fr_temp))
-        pdf_exp.append(fr_temp)
-        #     % Calculating fourier transform of theory
-    
-    pdf_exp = np.array(pdf_exp)
-
-    if plot == True:
-        plt.figure()
-        plt.pcolor(pdf_exp)
-        plt.colorbar()
-        plt.show()
-
-
-    return sM, pdf_exp, r
-
