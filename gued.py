@@ -122,9 +122,8 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
         default is set to True. This arguments sorts the data based on when it was saved (i.e. file number)
     plot (boolean): 
         default is set to False. When True, a plot of the data, log(data), and histogram of counts is shown
-    filter_data (boolean): 
-        default is set to False. When True, code prompts you for a minimum and maximum value then
-        returns only the information from files within this range
+    filter_data (boolean or list): 
+        default is set to False. If you want to select only a fraction of the images, set filter_data = [min_image,]
 
     GLOBAL VARIABLES:
 
@@ -200,9 +199,9 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
         stage_pos = stage_pos[idx_sort]
         counts = counts[idx_sort]
 
-    if filter_data == True:
-        min_val = int(input("Enter minimum file number: "))
-        max_val = int(input("Enter maximum file number: "))
+    if type(filter_data) == list:
+        min_val = filter_data[0]
+        max_val = filter_data[1]
         try:
             good_range = np.arange(min_val, max_val, 1)
             data_array = data_array[good_range]
@@ -1376,7 +1375,7 @@ def outlier_rev_algo(dat1d, std_factor=STD_FACTOR, fill_value = 'nan'):
     return dat1d
 
 
-def remove_radial_outliers_pool(data_array, center, plot=False):
+def remove_radial_outliers_pool(data_array, centers, plot=False):
     """
     Removes instances of outlier pixels based on the radial average of the image. Runs the hidden function _remove_radial_outliers in parallel. 
     Works by first converting an individual array to polar coordinates and remaps to create an average image. Then performs a logical check on 
@@ -1404,28 +1403,31 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
     clean_data = []
     rmv_count = []
 
-    if len(center) > 2:
+    if len(centers) > 2:
         print("Using all center values ")
         print("Removing radial outliers from all data")
         with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
             # Zip the arrays together and submit to the executor
-            results = list(executor.map(lambda args: cleaning_2d_data(*args), zip(center, data_array)))
+            #results = list(executor.map(lambda center, data: cleaning_2d_data(center, data), centers, data_array))
+            results = list(executor.map(cleaning_2d_data, centers, data_array))
         for result in results:
             clean_image = result
             clean_data.append(clean_image)
+            rmv = np.isnan(clean_image)
+            rmv_count.append(np.sum(rmv)/(len(data_array[0][0])*len(data_array[0][1])))
 
-    elif len(center) == 2:
+    elif len(centers) == 2:
         print("Using average center")
         print("Removing radial outliers from all data")
         with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
-            futures = [executor.submit(partial(cleaning_2d_data, center), data) for data in data_array]
+            futures = [executor.submit(partial(cleaning_2d_data, centers), data) for data in data_array]
             results = [future.result() for future in futures]
 
         for result in results:
             clean_image = result
             clean_data.append(clean_image)
             rmv = np.isnan(clean_image)
-            rmv_count.append(np.sum(rmv)/(1024*1024))
+            rmv_count.append(np.sum(rmv)/(len(data_array[0][0])*len(data_array[0][1])))
 
     clean_data = np.array(clean_data)
     rmv_count = np.array(rmv_count)
@@ -1453,7 +1455,7 @@ def remove_radial_outliers_pool(data_array, center, plot=False):
     return clean_data
 
 
-def azimuthal_integration_alg(center, image, max_azi=450):
+def azimuthal_integration_alg(center, image, max_azi=410):
     """
     Generate 1D data from 2D image using azimuthal integration.
     1D data must be clean before applying azimuthal integration.
@@ -1499,7 +1501,7 @@ def azimuthal_integration_alg(center, image, max_azi=450):
     return np.array(s0), np.array(azi_dat), np.array(azi_err)
 
 
-def get_azimuthal_average_pool(data_array, center, normalize=False, plot=False):
+def get_azimuthal_average_pool(data_array, centers, normalize=False, plot=False):
     """
     Code for getting the azimuthal average of each image for a given center. 
 
@@ -1507,7 +1509,7 @@ def get_azimuthal_average_pool(data_array, center, normalize=False, plot=False):
 
     data_array (3d array):
         array of images which will be integrated over. 
-    center (list):
+    centers (list):
         Can be either a list with length two of [cx, cy] or a list of lists i.e., [[cx1, cy1], [cx2, cy2]...] which define the center positions
 
     OPTIONAL ARGUMENTS:
@@ -1528,27 +1530,30 @@ def get_azimuthal_average_pool(data_array, center, normalize=False, plot=False):
     std_data = []
     s_ranges = []
 
-    if len(center) > 2:
+    if len(centers) > 2:
         print("Using all center values ")
         print("Calculating azimuthal average for all data")
         with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
             # Zip the arrays together and submit to the executor
-            results = list(executor.map(lambda args: azimuthal_integration_alg(*args), zip(center, data_array)))
+            results = list(executor.map(azimuthal_integration_alg, centers, data_array))
         for result in results:
             s, ave, std = result
             average_data.append(ave)
             std_data.append(std)
             s_ranges.append(s)
 
-    elif len(center) == 2:
+    elif len(centers) == 2:
         print("Using average center")
         print("Calculating azimuthal average for all data")
         with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
-            futures = [executor.submit(partial(azimuthal_integration_alg, center), data) for data in data_array]
+            futures = [executor.submit(partial(azimuthal_integration_alg, centers), data) for data in data_array]
             results = [future.result() for future in futures]
-
+        min_azi = 500
         for result in results:
             s, ave, std = result
+            if len(ave) < min_azi:
+                min_azi=len(ave)
+                print(f"maximum value previously: {min_azi} -- length of array: {len(ave)}")
             average_data.append(ave)
             std_data.append(std)
             s_ranges.append(s)
