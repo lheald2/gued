@@ -33,6 +33,14 @@ from skimage import util, draw
 # Configuration File
 from gued_globals import *
 
+# error handling
+import warnings
+
+# Suppress warnings about mean of empty slice and degrees of freedome for empty slice (warnings normally appear when taking azimuthal average)
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='Mean of empty slice')
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='Degrees of freedom <= 0 for slice')
+
+
 
 ### Reading Images Functions
 
@@ -43,7 +51,7 @@ def _show_counts(stage_positions, counts):
     counts_mean = np.mean(counts)  # Mean values of Total Counts of all images
     counts_std = np.std(counts)  # the STD of all the tc for all the iamges
     uni_stage = np.unique(stage_positions)  # Pump-probe stage position
-    plt.figure(figsize=(12,10))  # Plot counts rate, images number at each posi, and bad images
+    plt.figure(figsize=FIGSIZE)  # Plot counts rate, images number at each posi, and bad images
 
     plt.subplot(1, 3, 1)
     plt.plot(counts, '-d')
@@ -102,6 +110,7 @@ def _get_counts(data_array, plot=False):
     if data_array.ndim != 3:
         raise ValueError("Input data_array is not 3 dimensional.")
     if plot == True:
+        plt.figure(figsize=FIGSIZE)
         plt.plot(np.arange(len(data_array[:, 0, 0])), counts)
         plt.show()
     return counts
@@ -213,7 +222,7 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
 
     if plot == True:
         test = data_array[0]
-        plt.figure(figsize=(12,10))
+        plt.figure(figsize=FIGSIZE)
         plt.subplot(1, 3, 1)
         plt.imshow(test, cmap='jet')
         plt.xlabel('Pixel')
@@ -865,6 +874,59 @@ def subtract_background(data_array, mean_background, plot=True):
     return clean_data
 
 
+def remove_based_on_center(centers, data_array, stage_positions, std_factor=2, plot=False):
+    """ TODO ADD DOC STRING """
+    centers = np.array(centers)
+    center_ave = np.mean(centers, axis=0)
+    center_std = np.nanstd(centers, axis=0)
+    init_length = len(data_array)
+    
+    # Use np.logical_and for element-wise logical AND
+    good_idx = np.where(
+        np.logical_and(
+            np.abs(centers[:, 0] - center_ave[0]) < (std_factor * center_std[0]),
+            np.abs(centers[:, 1] - center_ave[1]) < (std_factor * center_std[1])
+        )
+    )[0]
+
+    print(good_idx.shape)
+    print(np.sum(good_idx))
+    new_array = data_array[good_idx]
+    new_stage_positions = stage_positions[good_idx]
+    new_centers = centers[good_idx]
+
+    print(init_length - len(new_array), " number of files removed from ", init_length, " initial files")
+
+    if plot:
+        plt.figure(figsize=(12, 4))
+
+        plt.subplot(1, 2, 1)
+        plt.plot(new_centers[:, 0], '-d', label='New Centers')
+        plt.plot(centers[:, 0], label='Original Centers')
+        plt.axhline(y=center_ave[0], color='k', linestyle='-', linewidth=1, label="mean")
+        plt.axhline(y=center_ave[0] - (3 * center_std[0]), color='r', linestyle='-', linewidth=0.5, label="min")
+        plt.axhline(y=center_ave[0] + (3 * center_std[0]), color='r', linestyle='-', linewidth=0.5, label="max")
+        plt.xlabel('Pixel Index')
+        plt.ylabel('Center x Values')
+        plt.legend()
+        plt.title('New x Centers')
+
+        plt.subplot(1, 2, 2)
+        plt.plot(new_centers[:, 1], '-d', label='New Centers')
+        plt.plot(centers[:, 1], label='Original Centers')
+        plt.axhline(y=center_ave[1], color='k', linestyle='-', linewidth=1, label="mean")
+        plt.axhline(y=center_ave[1] - (3 * center_std[1]), color='r', linestyle='-', linewidth=0.5, label="min")
+        plt.axhline(y=center_ave[1] + (3 * center_std[1]), color='r', linestyle='-', linewidth=0.5, label="max")
+        plt.xlabel('Pixel Index')
+        plt.ylabel('Center y Values')
+        plt.legend()
+        plt.title('New y Centers')
+
+        plt.tight_layout()
+        plt.show()
+
+    return new_array, new_stage_positions, new_centers
+
 # Masking and Center Finding Functions
 
 def mask_generator_alg(image, fill_value=np.nan, add_rectangular=False, plot=False):
@@ -1171,7 +1233,7 @@ def find_center_pool(data_array, plot=True, print_stats=True):
     center_x = np.array(center_x)
     center_y = np.array(center_y)
     if plot == True:
-        plt.figure(figsize=(10, 10))
+        plt.figure(figsize=(12, 6))
         plt.subplot(2, 1, 1)
         plt.plot(center_x[:])
         plt.title("X values for Centers")
@@ -1326,12 +1388,15 @@ def median_filter_pool(data_array, plot=True):
 ### Azimuthal Averaging and Radial Outlier Removal Functions
 # todo: clean and optimize
 def cart2pol(x, y): 
+    """Converts cartesian x,y coordinates to polar coordinates of r, theta."""
     r = np.sqrt(x**2 + y**2)
     theta = np.arctan2(y, x)
     return r, theta
 
 
 def preprocess_for_azimuthal_checking(center, dat):
+    """Preprocesses the data by creating a meshgrid based on the center and shape of the original image, converts the meshgrid to polar
+    coordinates to get a list of radial values then returns the length of x (int) and the r values (1d array)."""
     w, h = dat.shape
     xmat, ymat = np.meshgrid(np.arange(0,w,1)-center[0],np.arange(0,h,1)-center[1])
     rmat, _ = cart2pol(xmat, ymat)
@@ -1343,6 +1408,7 @@ def preprocess_for_azimuthal_checking(center, dat):
 
 
 def cleaning_2d_data(center, dat, std_factor=STD_FACTOR):
+    """Runs the outlier removal algorithm to check for instances of pixels which are outside of the radial average. """
     xlength, rmat = preprocess_for_azimuthal_checking(center, dat)
     res2d = np.copy(dat)
     
@@ -1455,7 +1521,7 @@ def remove_radial_outliers_pool(data_array, centers, plot=False):
     return clean_data
 
 
-def azimuthal_integration_alg(center, image, max_azi=410):
+def azimuthal_integration_alg(center, image, max_azi=450):
     """
     Generate 1D data from 2D image using azimuthal integration.
     1D data must be clean before applying azimuthal integration.
@@ -1477,7 +1543,11 @@ def azimuthal_integration_alg(center, image, max_azi=410):
     """
     
     xlength, rmat = preprocess_for_azimuthal_checking(center, image)
-    azi_dat, azi_err, s0 = [], [], []
+    #azi_dat, azi_err, s0 = [], [], []
+
+    azi_dat = np.full(max_azi, np.nan)
+    azi_err = np.full(max_azi, np.nan)
+    s0 = np.full(max_azi, np.nan)
     #dat[dat<-300] = np.nan
     
     mask_detect = True
@@ -1494,10 +1564,13 @@ def azimuthal_integration_alg(center, image, max_azi=410):
                 mask_detect=False
                 
         if mask_detect==False:
-            s0.append(i+1)
-            azi_dat.append(np.nanmean(roi))
-            azi_err.append(np.nanstd(roi)/np.sqrt(abs(np.nansum(roi))))
-            
+            #s0.append(i+1)
+            s0[i+1] = i+1
+            #azi_dat.append(np.nanmean(roi))
+            azi_dat[i+1] = np.nanmean(roi)
+            #azi_err.append(np.nanstd(roi)/np.sqrt(abs(np.nansum(roi))))
+            azi_err[i+1]=np.nanstd(roi)/np.sqrt(abs(np.nansum(roi)))
+
     return np.array(s0), np.array(azi_dat), np.array(azi_err)
 
 
@@ -1716,7 +1789,7 @@ def poly_fit(data_array, x_vals, degree = 2, plot=True, return_baseline=False):
 
 # Saving and Loading Data
 
-def save_data(file_name, group_name, run_number, azimuthal_data, stage_positions):
+def save_data(file_name, group_name, run_number, data_dict, group_note=None):
     """
     Saves the azimuthal average and stage positions after processing to an h5 file with the specified file_name. The group name specifies the 
     group subset the data relates to and the run number tags the number. For example, when running large data sets, each run will be a subset
@@ -1731,35 +1804,42 @@ def save_data(file_name, group_name, run_number, azimuthal_data, stage_positions
         label for the group of data that is being processed
     run_number (int):
         specifies ths subset of data being processed
-    azimuthal_data (2d array):
-        azimuthally averaged scattering intensity of run subset
-    stage_positions (1d array):
-        stage positions relating to the scattering intensity for the run subset
+    data_dict (dictionary):
+        dictionary containing variable labels and data sets to be saved. Can contain any number of data_sets
+        i.e., data_dict = {'I' : norm_data, 'stage_positions' : stage_positions, 'centers' : centers}
 
+    OPTIONAL ARGUMENTS:
+
+    group_note (str):
+        Note to attach to each group to explain any relevant details about the data processing (i.e., Used average center)
+    
+    RETURNS:
+
+    Doesn't return anything but creates an h5 file with the stored data or appends already existing file.
     """
 
-    # Open the HDF5 file in append mode
     with h5py.File(file_name, 'a') as f:
-        # Check if the group exists, create it if not
-        if group_name not in f:
-            group = f.create_group(group_name)
-            print(f"Creating new group called {group_name}")
-        else:
+        # Create or access the group
+        if group_name in f:
             group = f[group_name]
+        else:
+            group = f.create_group(group_name)
         
-        # Create unique dataset names for each run
-        dataset_name_var1 = f'I_run_{run_number}'
-        dataset_name_var2 = f'stage_positions_run_{run_number}'
+        # Add a description of the data (if provided)
+        if group_note:
+            group.attrs['note'] = group_note
         
-        # Save the datasets
-        group.create_dataset(dataset_name_var1, data=azimuthal_data)
-        group.create_dataset(dataset_name_var2, data=stage_positions)
-        
-        # Optionally, add attributes to each dataset
-        group[dataset_name_var1].attrs['description'] = f'Azimuthal averaged data from run {run_number}'
-        group[dataset_name_var2].attrs['description'] = f'Stage positions from run {run_number}'
+        for dataset_name, data in data_dict.items():
+            # Append run number to the dataset name
+            run_dataset_name = f"{dataset_name}_run_{run_number}"
+            
+            # Create or overwrite the dataset within the group
+            if run_dataset_name in group:
+                del group[run_dataset_name]
+            group.create_dataset(run_dataset_name, data=data)
+                
+    print(f"Data for run {run_number} saved to group '{group_name}' in {file_name} successfully.")
 
-    print(f"Run {run_number} data saved successfully.")
     return
 
 
@@ -1798,52 +1878,7 @@ def add_to_h5(file_name, group_name, var_name, var_data):
         print(f"Variable '{var_name}' added to group '{group_name}' successfully.")
 
 
-def read_individual_run(file_name, group_name, run_number):
-    """
-    Allows you to read a specific run from an h5 file. 
-    
-    ARGUMENTS:
-    
-    file_name (str):
-        file name or path that holds the data of interest
-    group_name (str):
-        group subset within the file
-    run_number (int):
-        run of interest
-        
-    RETURNS:
-    
-    I_data (2d array):
-        azimuthally averaged scattering data for the specified run number
-    stage_data (1d array):
-        stage positions for the specified run number
-    """
-
-    with h5py.File(file_name, 'r') as f:
-        group = f[group_name]
-        
-        # Create unique dataset names for each run
-        dataset_name_var1 = f'I_run_{run_number}'
-        dataset_name_var2 = f'stage_positions_run_{run_number}'
-        
-        if dataset_name_var1 not in group or dataset_name_var2 not in group:
-            print(f"Error: Run {run_number} data not found in group '{group_name}'.")
-            return None, None
-        
-        # Load data for var1 and var2
-        I_data = group[dataset_name_var1][:]
-        stage_data = group[dataset_name_var2][:]
-        
-        # Optionally, print attributes
-        attr_var1 = group[dataset_name_var1].attrs.get('description', 'No description')
-        attr_var2 = group[dataset_name_var2].attrs.get('description', 'No description')
-        print(f"Attributes for var1_run_{run_number}: {attr_var1}")
-        print(f"Attributes for var2_run_{run_number}: {attr_var2}")
-        
-    return I_data, stage_data
-
-
-def read_combined_data(file_name, group_name, run_numbers = 'all'):
+def read_combined_data(file_name, group_name, variable_names, run_numbers = 'all'):
     """Reads in and concatenates all the data within a group from an h5 file.
     
     ARGUMENTS:
@@ -1852,42 +1887,78 @@ def read_combined_data(file_name, group_name, run_numbers = 'all'):
         file name or path that holds the data of interest
     group_name (str):
         group subset within the file
+    variable_names (list of strings):
+        list of the variable names you're interested in. 
+
+    OPTIONAL ARGUMENTS:
+
+    run_numbers (list):
+        default set to 'all' which reads in all runs in the group of interest. If you want to only read in particular run numbers, set 
+        run_numbers = list like [1,2,3]
         
     RETURNS:
     
-    I_data (2d array):
-        azimuthally averaged scattering data for the specified group (all runs combined)
-    stage_data (1d array):
-        stage positions for the specified group (all runs combined)
+    combined_data (dict):
+        dictionary containing the data concatenated along run number containing the variables specified in variable names
 
     """
     if run_numbers == 'all':
+        concatenated_data = {name: None for name in variable_names}
+
         with h5py.File(file_name, 'r') as f:
+            if group_name not in f:
+                raise ValueError(f"Group '{group_name}' not found in the HDF5 file.")
+            
             group = f[group_name]
-            
-            # Collect all datasets for var1 and var2
-            I_data_list = []
-            stage_data_list = []
-            
-            for dataset_name in group.keys():
-                if 'I' in dataset_name:
-                    I_data_list.append(group[dataset_name][:])
-                elif 'stage' in dataset_name:
-                    stage_data_list.append(group[dataset_name][:])
-            
-            # Combine data for var1 and var2
-            I_data = np.concatenate(I_data_list)
-            stage_data = np.concatenate(stage_data_list)
+
+            # Initialize lists to accumulate data across runs
+            data_accumulators = {name: [] for name in variable_names}
+
+            # Iterate over each run dataset
+            for run_dataset_name in group.keys():
+                for variable_name in variable_names:
+                    if run_dataset_name.startswith(variable_name):
+                        data_accumulators[variable_name].append(group[run_dataset_name][:])
+
+            # Concatenate the accumulated data across runs
+            for name in variable_names:
+                if data_accumulators[name]:
+                    concatenated_data[name] = np.concatenate(data_accumulators[name], axis=0)
+                else:
+                    concatenated_data[name] = None
     
     elif type(run_numbers) == list:
-        I_data_list = []
-        stage_data_list = []
-        for run_number in run_numbers:
-            I, stage = read_individual_run(file_name, group_name, run_number)
-            I_data_list.append(I)
-            stage_data_list.append(stage)
-        I_data = np.concatenate(I_data_list)
-        stage_data = np.concatenate(stage_data_list)
+        concatenated_data = {name: None for name in variable_names}
+
+        with h5py.File(file_name, 'r') as f:
+            if group_name not in f:
+                raise ValueError(f"Group '{group_name}' not found in the HDF5 file.")
+            
+            group = f[group_name]
+
+            # Initialize lists to accumulate data across selected runs
+            data_accumulators = {name: [] for name in variable_names}
+
+            # Iterate over each run dataset and check if it's in the selected runs
+            for run_dataset_name in group.keys():
+                run_number = int(run_dataset_name.split('_run_')[-1])
+                if run_number in run_numbers:
+                    for variable_name in variable_names:
+                        if run_dataset_name.startswith(variable_name):
+                            data_accumulators[variable_name].append(group[run_dataset_name][:])
+
+            # Concatenate the accumulated data across selected runs
+            for name in variable_names:
+                if data_accumulators[name]:
+                    concatenated_data[name] = np.concatenate(data_accumulators[name], axis=0)
+                else:
+                    concatenated_data[name] = None
         
-    return I_data, stage_data
+    return concatenated_data
+    
+
+
+
+        
+
 
