@@ -1,0 +1,1521 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import sys
+sys.path.append('packages')
+import warnings
+from scipy import signal
+import scipy.interpolate as interp
+from scipy.interpolate import make_interp_spline
+from scipy.optimize import curve_fit
+import scipy.stats
+from PIL import Image
+from matplotlib.colors import TwoSlopeNorm
+warnings.simplefilter("ignore")
+from gued_globals import *
+
+#Authors: Lauren F. Heald, Keke Chen
+#Contact: lheald2@unl.edu, ckk20@mails.tsinghua.edu.cn
+# Path for Theory Package
+
+PATH_DCS = 'packages\\dcs_repositiory\\3.7MeV\\'
+#path_dcs = '/sdf/home/l/lheald2/GUED/jupyter_notebook/user_notebooks/dcs_repository/3.7MeV/'
+TABLE = pd.read_csv(PATH_DCS+'Periodic_Table.csv')
+angs = '\u00C5' 
+
+def import_s():
+    """ This functions uses the C.dat files as an example file to generate values of s for the simulation calculations. 
+    
+    RETURNS:
+
+    s (array) = array of s values which correspond to calculated scattering intensities for each atom.
+    """
+    
+    qe=1.602176565e-19 
+    me=9.10938291e-31
+    c=299792458 
+    h=6.62606957e-34
+    E=3700000*qe+me*c**2 #kinetic energy=3.7MeV
+    p=(E**2/c**2-me**2*c**2)**0.5
+    lamb=h/p
+    k=2*np.pi/lamb #wave vector of the incident electron
+
+    path=PATH_DCS+'C.dat'
+
+    with open(path,'r') as file:
+        a=file.read()
+
+    a0=a.split('\n')
+    theta_deg=np.empty(130)
+
+    for i in range(130):
+        a31=str(a0[31+i]).split(' ')
+        theta_deg[i]=a31[2]
+    
+    theta=theta_deg*np.pi/180
+    S=2*k*np.sin(0.5*theta)
+    s=np.array(S)
+    return s
+
+
+def read_dat_dcs(atom_no):
+    """ 
+    Reads in the scattering intensity (form factors) for each atom in the molecule of interest from the .dat files calculated using ELSEPA. 
+    
+    ARGUMENTS: 
+
+    atom_no (int):
+        maximum atomic number of interest (default value is 55)
+    
+    GLOBAL VARIABLES:
+
+    PATH_DCS (string):
+        path to the folder containing the .dat files
+    
+    RETURNS:
+
+    data (array):
+        values of the scattering intensities in cm taken from the .dat files. 
+    """
+    
+    atom_sym=no_to_sym(atom_no)
+    path=PATH_DCS+atom_sym+'.dat'
+    with open(path,'r') as file:
+        a=file.read()
+    a0=a.split('\n')
+    data=np.empty(130)
+    for i in range(130):
+        a31=str(a0[31+i]).split(' ')
+        #print(a31)
+        data[i]=a31[6]
+    #print(data)
+    return data**0.5 ## returns in cm
+
+
+def sym_to_no(atom_symbol):
+    """ 
+    Short cut for getting the atomic number from the atomic symbol.
+    
+    ARGUMENTS: 
+
+    atom_symbol (string):
+        atomic symbol
+    
+    RETURNS:
+
+    atom_number (int):
+        atomic number
+    """
+    
+    n=np.where(TABLE['Symbol']==atom_symbol)
+    atom_number = int(n[0]+1)
+    return atom_number
+
+
+def no_to_sym(atom_number):
+    """ 
+    Short cut for getting the atomic symbol from the atomic number. 
+    
+    ARGUMENTS: 
+    atom_number (int):
+        atomic number
+    
+    RETURNS:
+    atom_symbol (string):
+        atomic symbol    
+    """
+    
+    atom_symbol = TABLE['Symbol'][atom_number-1]
+    return atom_symbol
+
+
+def import_DCS(max_at_no=55):
+    """ 
+    Uses read_dat_dcs to get the form factors for all the atoms available. 
+    
+    ARGUMENTS: 
+    max_at_no (int):
+        maximum atomic number of interest (default value is 55)
+    
+    RETURNS:
+
+    f (array):
+        form factors for all atoms
+    """
+    
+    f=np.empty((max_at_no+1,130))
+    for i in range(max_at_no):
+        f[i+1]=read_dat_dcs(i+1)
+    return f
+
+# Set up Constants
+FORM_FACTORS = import_DCS()
+S_THEORY = import_s()
+
+def load_static_mol_coor(path_mol, mol_name, file_type):
+    """ Reads in either a .csv or .xyz file containing moleculear coordinates and adds a column containing the atomic number for each atom in 
+    the molecule. Errors are thrown if an improper file type is chosen or if the .xyz or .csv file needs further formatting.
+    
+    ARGUMENTS:
+    
+    path_mol (string):
+        path to the directory of the molecular structure
+    mol_name (string):
+        file name of the structural file used for the simulation
+    file_type (string):
+        either xyz or csv depending on what the file being used is. Determines treatment
+    
+    RETURNS:
+    
+    coor (array): 
+        N x 5 array where N = # of atoms. Column 0 contains the atomic symbol, columns 1, 2, and 3 contain x, y, and z coordinates
+        and column 4 contains the atomic number. 
+    atom_sum (int):
+        total number of atoms in the molecule
+    """
+    
+    filename=path_mol + mol_name + file_type
+
+    if file_type=='.xyz':
+        coor_xyz, atom_sum = load_xyz(filename)
+        coor = get_modified_coor_for_xyz(coor_xyz,atom_sum)
+        
+    if file_type =='.csv':
+        mol_filename = mol_name+'.csv'
+        coor_M = pd.read_csv(path_mol+mol_filename)
+        coor = np.array(coor_M)
+        num = np.array(coor[:,3])
+        atom_sum = int(len(num))
+        coor = get_modified_coor_for_csv(coor,atom_sum)
+
+    elif file_type!='.csv' and file_type!='.xyz':
+        print('error! Please type in the right molecular coordinate file type, .xyz or .csv')
+        
+    return coor,atom_sum
+
+
+def load_xyz(xyz_file):
+    """
+    Reads in an .xyz generated from programs such as Gaussian or ORCA.
+    
+    ARGUMENTS: 
+
+    xyz_file (string):
+        full path to the .xyz file of interest.
+    
+    RETURNS: 
+
+    coordinates (array):
+        coordinate array of N (# of atoms) x 4 shape with column 0 containing atomic symbol, and columns 1, 2, and 3 containing x, y, z 
+        coordinates
+    atom_sum (int):
+        total number of atoms in the molecule
+    """
+
+    file = open(xyz_file, 'r')
+    text = file.readlines()
+    file.close()
+    count = len(text)
+    coordinates = []
+    for j in range(0, count):
+        try:
+            string = list(map(str, text[j].split()))
+            coordinates.append(string)
+        except Exception:
+            pass    
+    atom_sum = coordinates[0]
+    atom_sum = int(np.array(atom_sum))
+    coordinates = np.array(coordinates[2:])
+
+    return coordinates, atom_sum
+
+
+def load_freq_xyz(path_mol, mol_name, file_type):
+    """
+    Reads in a frequency trajectory .xyz file containing many structures which evolve over time generated from programs such as Gaussian or
+    ORCA. The file also contains information on the time points for each structural evolution.
+
+    ARGUMENTS:
+
+    path_mol (string):
+        path to the directory of the molecular structure
+    mol_name (string):
+        file name of the structural file used for the simulation
+    file_type (string):
+        either xyz or csv depending on what the file being used is.
+
+    RETURNS:
+
+    re (array):
+        array of atom symbol, x, y, z, and atom number for each time step
+    atom_sum (int):
+        total number of atoms in the molecule
+    time (array):
+        time points corresponding to the simulation in fs
+    """
+
+    filename = path_mol + mol_name + file_type
+    xyz_file = filename
+    file = open(xyz_file, 'r')
+    text = file.readlines()
+    file.close()
+    count = len(text)
+    re = []
+
+    atom_sum = list(map(int, text[0].split()))
+    atom_sum = atom_sum[0]
+    iteration = atom_sum + 2
+
+    groups = np.arange(0, count, (iteration))
+
+    temp = (list(map(str, text[atom_sum + 3].split())))
+    inv_cm = float(temp[2])
+    print(inv_cm)
+    fs = (1 / (inv_cm * 2.99e10)) * 1e15
+    print("fs=", fs)
+    fs_step = fs / len(groups)
+    time = np.arange(0, fs, fs_step)
+
+    for j in range(len(groups)):
+        temp = []
+        lines = np.arange(groups[j] + 2, groups[j] + iteration)
+        for line in lines:
+            string = list(map(str, text[line].split()))
+            atom_num = sym_to_no(string[0])
+            info = string[0:4] + [str(atom_num)]
+            temp.append(info)
+            # print(string)
+        re.append(temp)
+
+    re = np.array(re)
+
+    return re, atom_sum, time
+
+
+def get_modified_coor_for_xyz(re,atom_sum):
+    """ 
+    Appends a column of atomic numbers to the coordinate array read from the .xyz file
+    
+    ARGUMENTS: 
+
+    re (array):
+        coordinate array of N (# of atoms) x 4 shape with column 0 containing atomic symbol, and columns 1, 2, and 3 containing x, y, z 
+        coordinates
+    atom_sum (int):
+        total number of atoms in the molecule
+    
+    RETURNS: 
+
+    coor (array): 
+        N x 5 array where N = # of atoms. Column 0 contains the atomic symbol, columns 1, 2, and 3 contain x, y, and z coordinates
+        and column 4 contains the atomic number. 
+    """
+
+    atom_num=[0 for i in range(atom_sum)]
+    for i in range(atom_sum):
+        atom_num[i]=sym_to_no(re[i][0])
+
+    atom_num=np.array(atom_num)
+    atom_num=atom_num[:,np.newaxis]
+    coor=np.hstack((re,atom_num))
+
+    return coor
+
+
+def get_modified_coor_for_csv(coor_csv,atom_sum):
+    """ 
+    Appends a column of atomic numbers to the coordinate array read from the .csv file
+    
+    ARGUMENTS: 
+
+    coor_csv (array):
+        coordinate array of N (# of atoms) x 4 shape with column 0 containing atomic symbol, and columns 1, 2, and 3 containing x,
+        y, and z coordinates
+    atom_sum (int):
+        total number of atoms in the molecule
+    
+    RETURNS: 
+
+    coor (array):
+        N x 5 array where N = # of atoms. Column 0 contains the atomic symbol, columns 1, 2, and 3 contain x, y, and z coordinates
+        and column 4 contains the atomic number. 
+    """
+
+    atom_num=[0 for i in range(atom_sum)]
+    for i in range(atom_sum):
+        atom_num[i]=sym_to_no(coor_csv[i,0])
+            
+    atom_num=np.array(atom_num)
+    atom_num=atom_num[:,np.newaxis]
+    coor=np.hstack((coor_csv,atom_num))
+
+    return coor
+
+
+def get_I_atomic(coor, atom_sum, s_max=12):
+    """
+    Calculates the I_atomic scattering pattern for the molecule of interest. 
+
+    ARGUMENTS: 
+
+    f (array):
+        Array of form factors for all elements
+    s000 (array):
+        s values of interest in calculation
+    s_max (int):
+        maximum s value for consideration
+    coor (array): 
+        coordinates of molecule
+    atom_sum (int):
+        total number of atoms in molecule
+    
+    RETURNS:
+
+    I_at (array):
+        values for I atomic
+    s_new (array):
+        s values related to I atomic
+    """
+
+    I_at_all = []
+    s_angstrom = S_THEORY*1e-10 #in angstroms
+    s_new = np.linspace(0, s_max, 500)
+    for i in range(atom_sum):
+        I_atomic = []
+        I_at = 0
+        amps = FORM_FACTORS[int(coor[i,4])]
+        #print(amps)
+        interp_amps = interp.interp1d(s_angstrom[0:125], amps[0:125])
+        amps_new = interp_amps(s_new)
+        for k in range(len(amps_new)):
+            f_new = amps_new[k]
+            I_at = np.abs(f_new)**2
+            I_atomic.append(float(I_at))
+        I_at_all.append(I_atomic)
+    I_at = sum(np.array(I_at_all))
+
+    return I_at, s_new
+
+
+def get_I_molecular(coor, atom_sum, s_max=12):
+    """
+    Calculates the I_molecular scattering pattern for the molecule of interest. 
+
+    ARGUMENTS: 
+
+    f (array):
+        Array of form factors for all elements
+    s000 (array):
+        s values of interest in calculation
+    s_max (int):
+        maximum s value for consideration
+    coor (array): 
+        coordinates of molecule
+    atom_sum (int):
+        total number of atoms in molecule
+    
+    RETURNS:
+
+    I_mol (array):
+        values for I molecular
+    s_new (array):
+        s values related to I molecular
+    """
+    x = np.array(coor[:, 1])
+    y = np.array(coor[:, 2])
+    z = np.array(coor[:, 3])
+    
+    s_angstrom = S_THEORY * 1e-10 #convert to angstroms
+    
+    s_new = np.linspace(0, s_max, 500)
+    I_mol = np.zeros(len(s_new))
+    for i in range(atom_sum):
+        for j in range(atom_sum): # Does each atom pair calculation twice
+            if i != j:
+                r_ij = (float(x[i]) - float(x[j])) ** 2 + (float(y[i]) - float(y[j])) ** 2 + (float(z[i]) - float(z[j])) ** 2
+                r_ij = r_ij ** 0.5
+                #print(f"bond length between {coor[i, 0]} and {coor[j, 0]} = {r_ij}")
+                amps_i = FORM_FACTORS[int(coor[i,4])]
+                amps_j = FORM_FACTORS[int(coor[j,4])]
+                interp_amps_i = interp.interp1d(s_angstrom[0:125], amps_i[0:125])
+                interp_amps_j = interp.interp1d(s_angstrom[0:125], amps_j[0:125])
+                amps_new_i = interp_amps_i(s_new)
+                amps_new_j = interp_amps_j(s_new)
+                #print(len(amps_new_j))
+                I_mol[0]+=FORM_FACTORS[int(coor[i,4]),0]*FORM_FACTORS[int(coor[j,4]),0]
+                I_mol[1:len(s_new)]+=amps_new_i[1:len(s_new)]*amps_new_j[1:len(s_new)]*np.sin(
+                    s_new[1:len(s_new)]*r_ij)/s_new[1:len(s_new)]/r_ij
+    
+    return I_mol, s_new
+
+
+def get_I_from_xyz(coor, atom_sum, s_max=12):
+    """
+    Calculates the total scattering of the molecule of interest by using the functions get_I_atomic and get_I_molecular. 
+    
+    ARGUMENTS: 
+
+    f (array):
+        Array of form factors for all elements
+    s000 (array):
+        s values of interest in calculation
+    s_max (int):
+        maximum s value for consideration
+    coor (array): 
+        coordinates of molecule
+    atom_sum (int):
+        total number of atoms in molecule
+        
+    RETURNS:
+
+    I (array): 
+        sum of I atomic and I molecular
+    I_at (array):
+        values for I atomic
+    I_mol (array):
+        values for I molecular
+    s_new (array):
+        s values related to I
+    """
+    
+    I_at, s_new = get_I_atomic(coor, atom_sum, s_max)
+    I_mol, _ = get_I_molecular(coor, atom_sum, s_max)
+    I = I_at + I_mol
+
+    return I, I_at, I_mol, s_new
+
+
+def get_I_for_exp_from_mol_coor(s, s_exp, coor, atom_sum):
+    """
+    ARGUMENTS: 
+
+    f (ndarray):
+        form factors for all atoms
+    s (1d array):
+        s values read from the import_dcs function
+    s_exp (1d array):
+        s values corresponding to the experimental data
+    coor (ndarray):
+        coordinates for the molecule of interest
+    atom_sum (int):
+        total number of atoms in molecule
+
+    RETURNS:
+
+    I1 (1d array): 
+        total scattering intensity (I atomic + I molecular)
+    I_at1 (1d array): 
+        atomic scattering intensity
+    I_mol1 (1d array):
+        molecular scattering intensity
+    """
+
+    #todo rewrite with proper interpolation
+    # slightly different from the function get_I_from_mol_coor
+    # this function is to simulate I that matches the s from experiments
+    b = range(atom_sum)
+    Lm = 125  # Lm should be no larger than 138
+    I = np.zeros(Lm)
+    I_at = np.zeros(Lm)
+    I_mol = np.zeros(Lm)
+
+    for i in range(atom_sum):
+        I_at += FORM_FACTORS[int(coor[i, 4]), 0:Lm] * FORM_FACTORS[int(coor[i, 4]), 0:Lm]
+    for i in b:
+        for j in b:
+            if i != j:
+                r_ij = ((float(coor[i, 1]) - float(coor[j, 1])) ** 2 + (float(coor[i, 2]) - float(coor[j, 2])) ** 2 + (
+                            float(coor[i, 3]) - float(coor[j, 3])) ** 2) ** 0.5 * 1e-10
+                # distance between atom i and j
+                I_mol[0] += FORM_FACTORS[int(coor[i, 4]), 0] * FORM_FACTORS[int(coor[j, 4]), 0]
+                I_mol[1:Lm] += FORM_FACTORS[int(coor[i, 4]), 1:Lm] * FORM_FACTORS[int(coor[j, 4]), 1:Lm] * np.sin(s[1:Lm] * r_ij) / s[
+                                                                                                              1:Lm] / r_ij
+    I = I_at + I_mol
+    s0 = s[0:Lm] * 1e-10
+
+    I1 = make_interp_spline(s0, I)(s_exp)
+    I_at1 = make_interp_spline(s0, I_at)(s_exp)
+    I_mol1 = make_interp_spline(s0, I_mol)(s_exp)
+
+    return I1, I_at1, I_mol1
+
+
+def get_sM_and_PDF_from_I(I_at,I_mol,s,r_max,damp_const):
+    """ 
+    Calculates the sM and PDF from the simulated I atomic and I molecular for the molecule of interest. 
+    
+    ARGUMENTS: 
+    
+    I_at (array):
+        values for I atomic
+    I_mol (array):
+        values for I molecular
+    s (array):
+        scattering range of interest
+    r_max (int):
+        maximum radius for consideration
+    damp_const (int):
+        damping constant for the fourier transform 
+    
+    RETURNS:
+
+    sM (array): 
+        modified scattering intensity
+    PDF (array):
+        pair distribution function
+    r (array):
+        radial values corresponding to the PDF
+    """
+
+    sM=I_mol/I_at*s #calculate sM from I
+    r_max = r_max * 1; # convert to picometer
+    r=range(r_max)
+    #print(r)
+    PDF=[0 for i in range(r_max)]
+
+    for i in range(len(s)-1): 
+        PDF+=sM[i]*np.sin(s[i]*1e10*np.array(r)*1e-12)*(s[i+1]-s[i])*np.exp(-s[i]**2/damp_const)
+    #for i in range(r_max):
+     #   PDF[i]+=sum(sM*np.sin(s*1e10*np.array(r[i])*1e-12)*(s[1]-s[0])*np.exp(-s**2/damp_const))
+
+    return sM,PDF,np.array(r)
+
+
+def plot_delay_simulation_with_conv(matrix_before_conv,x_range,col,t_interval,nt,space_for_convol):
+    """ ADD DOC STRING"""
+
+    x0 = np.linspace(-col,col,int(255/t_interval))
+    h = np.exp(-x0**2*t_interval**2/8000)/(np.pi*8000/t_interval**2)**0.5 #normalize the gaussian
+    M1 = get_2d_matrix(x_range,nt+space_for_convol*2)
+    for i in range(x_range):
+        M1[i]=signal.convolve(matrix_before_conv[:,i],h,mode='same')
+
+    #M1=np.transpose(M1)
+    M1 = np.array(M1)
+            
+    norm = TwoSlopeNorm(vmin=M1.min(),vcenter=0,vmax=M1.max())
+    plt.figure(figsize=(15,5))
+    pc=plt.imshow(M1[:, 0:nt+space_for_convol-1],norm=norm,cmap=plt.get_cmap('seismic'),alpha=0.65)
+    plt.colorbar(pc)
+    ax=plt.gca()
+    ax.invert_yaxis()
+    ax.xaxis.set_ticks_position('bottom')
+    plt.xlabel('time/fs')
+    #plt.xticks(np.arange(0,nt+space_for_convol,100),np.arange(-space_for_convol*t_interval,nt*t_interval,100*t_interval))
+    #plt.axhline(y=space_for_convol,linestyle='--')
+    plt.grid()
+    return
+
+
+def plot_I_sM_PDF(I,sM,PDF,s,r,title_I,title_sM,title_PDF):
+    """ Plots I total, sM and PDF"""
+
+    plt.figure()
+    plt.subplot(1,3,1)
+    plt.plot(s,I/I.max())
+    plt.xlabel('s/angs^-1')
+    plt.title(title_I)
+    plt.grid()
+    
+    plt.subplot(1,3,2)    
+    plt.plot(s,sM)
+    plt.xlabel('s/angs^-1')
+    plt.title(title_sM)
+    plt.grid()
+    
+    plt.subplot(1,3,3)    
+    plt.plot(r,PDF)
+    plt.xlabel('r/pm')
+    plt.title(title_PDF)
+    plt.grid()
+    
+    plt.tight_layout()
+    plt.show()
+    return
+
+
+def load_time_evolving_xyz(path_mol, mol_name, file_type):
+    """
+    Reads in a trajectory .xyz file containing many structures which evolve over time generated from programs such as Gaussian or ORCA. The
+        file also contains information on the time points for each structural evolution.
+
+    ARGUMENTS:
+
+    path_mol (string):
+        path to the directory of the molecular structure
+    mol_name (string):
+        file name of the structural file used for the simulation
+    file_type (string):
+        either xyz or csv depending on what the file being used is.
+
+    RETURNS:
+
+    coor_txyz (array):
+        array of atom symbol, x, y, z, and atom number for each time step
+    atom_sum (int):
+        total number of atoms in the molecule
+    time (array):
+        time points corresponding to the simulation in fs (??)
+    """
+
+    mol_filename = mol_name + file_type
+    with open(path_mol + mol_filename, 'r') as f:
+        a = f.read()
+
+    a0 = a.split('\n')
+    atom_sum = int(a0[0])  # get the total atom number in the molecule, this does great help
+
+    time_count = int((len(a0) - 1) / (atom_sum + 2))  # find how many time points are there in the time evolution file
+    time = [0 for i in range(time_count)]
+    print("count = ", time_count)
+
+    coor_txyz = get_3d_matrix(time_count, atom_sum, 4)
+    # coor_txyz[time order number][atom type][coordinate xyz]
+
+    m = 0
+    n = 0
+    o = 0
+    # just little tricks to move the data into right place, from the file to array
+    # don't be confused by these parameters
+    for i in range(time_count):
+        m = 0
+        a1 = str(a0[(atom_sum + 2) * i + 1]).split(' ')
+        for j in a1:
+            if j == 't=':
+                m = 1
+            if j != '' and j != 't=' and m == 1:
+                time[i] = j
+                break
+        for j in range(atom_sum):
+            a1 = str(a0[(atom_sum + 2) * i + 2 + j]).split(' ')
+            for k in a1:
+                if k != '':
+                    coor_txyz[i][n][o] = k
+                    o += 1
+            o = 0
+            n += 1
+        n = 0
+    print(len(coor_txyz[0][0]))
+    for i in range(time_count):
+        coor1 = get_modified_coor_for_xyz(coor_txyz[i][:][:], atom_sum)
+        coor_txyz[i] = coor1
+
+    return np.array(coor_txyz), atom_sum, time
+
+
+def static_sim(path_mol, mol_name, file_type, s_max = 12, r_max = 800, damp_const = 33, plot=True, return_data = False):
+    """
+    Calculates the static scattering of a molecule based on the structure. 
+    
+    ARGUMENTS:
+
+    path_mol (str):
+        path to the folder with the trajectory simulation
+    mol_name (str):
+        name of the xyz file
+    file_type (str):
+        '.xyz' or '.csv' but I think it only works with xyz currently 
+
+    OPTIONAL ARGUMENTS:
+
+    s_max (int):
+        Default set to 12 inverse angstroms. Defines the maximum scattering range for consideration
+    r_max (int):
+        Default set to 800 (picometers). Defines the maximum r distance for consideration
+    damp_const (int):
+        Default set to 33. Defines the size of the damping constant used in the Fourier transform
+    plot (boolean):
+        Default set to True. When true, plots the dI/I and PDF with respect to time and distance
+    return_data (boolean):
+        Default set to False. When true, returns I atomic, I molecular, s, sM, PDF, and r.
+        
+    """
+
+    coor, atom_sum  = load_static_mol_coor(path_mol,mol_name,file_type)
+    _, I_at, I_mol, s_new = get_I_from_xyz(coor, atom_sum, s_max)
+    sM, PDF, r_new = get_sM_and_PDF_from_I(I_at, I_mol, s_new, r_max, damp_const)
+
+    if plot == True:
+        plt.figure(figsize=(8,4))
+            
+        plt.subplot(1,2,1)    
+        plt.plot(s_new,sM)
+        plt.xlabel(r'S, ['+angs+'$^{-1}$]')
+        plt.ylabel('sM(s)')
+        plt.title('Modified Scattering Intensity')
+        plt.grid()
+            
+        plt.subplot(1,2,2)    
+        plt.plot(r_new, PDF)
+        plt.xlabel(r'R, [pm]')
+        plt.ylabel('PDF')
+        plt.title('Pair Distribution Function')
+        plt.grid()
+            
+        plt.tight_layout()
+        plt.show()
+    
+    if return_data == True:
+        return I_at, I_mol, s_new, sM, PDF, r_new
+    else:
+        return
+
+
+def trajectory_sim(path_mol, mol_name, file_type,s_max=12):
+    """ 
+    Calculates the scattering and plots results of a trajectory simulation with a series of xyz coordinates and corresponding time steps.
+    
+    ARGUMENTS:
+    
+    path_mol (str):
+        path to the folder with the trajectory simulation
+    mol_name (str):
+        name of trajectory file
+    file_type (str):
+        '.xyz' or '.csv' but I think it only works with xyz currently 
+        
+    OPTIONAL ARGUMENTS:
+    
+    s_max (int):
+        Default set to 12 inverse angstroms. Defines the maximum scattering range for consideration
+        
+    RETURNS: 
+    
+    nothing right now lol
+    """
+
+    coor_txyz, atom_sum, time=load_time_evolving_xyz(path_mol,mol_name,file_type) #load xyz data
+    #options: load_time_evolving_xyz, or load_time_evolving_xyz1
+
+    time_steps = len(time)
+    t_interval = float(time[1])-float(time[0])
+    col = int(160/t_interval)
+    space_for_convol = int(200/t_interval)
+        
+    I0,I0_at,I0_mol,s_new = get_I_from_xyz(coor_txyz[0],atom_sum, s_max)
+    delta_I_over_I_t = get_2d_matrix(time_steps+space_for_convol*2,len(s_new))
+
+    for i in range(time_steps):
+        I,I_at,I_mol,s = get_I_from_xyz(coor_txyz[i],atom_sum, s_max)
+        delta_I_over_I_t[i+space_for_convol]=(I-I0)/I
+    
+    for i in range(space_for_convol):
+        delta_I_over_I_t[i+time_steps+space_for_convol]=delta_I_over_I_t[time_steps+space_for_convol-1]
+    
+    delta_I_over_I_t=np.array(delta_I_over_I_t)
+    plot_delay_simulation_with_conv(delta_I_over_I_t*100,len(s),col,t_interval,time_steps,space_for_convol)
+
+    plt.ylabel('s/angs^-1')
+    plt.yticks(np.arange(0,len(s),len(s)/s.max()),np.arange(0,s.max(),1))
+    plt.axvline(x=space_for_convol,linestyle='--')
+    plt.title('delta_I/I')
+    plt.show()
+    return
+
+
+def freq_sim(path_mol, tra_mol_name, file_type, s_max=12, evolutions=10, r_max=800, damp_const=33, plot=True):
+    """
+    Calculates the delta I/I and PDF for a frequency simulation done by ORCA and plots a set mumber of evolutions of the vibrational mode.
+    
+    ARGUMENTS:
+
+    path_mol (str):
+        path to the folder with the trajectory simulation
+    mol_name (str):
+        name of trajectory file
+    file_type (str):
+        '.xyz' or '.csv' but I think it only works with xyz currently 
+
+    OPTIONAL ARGUMENTS:
+
+    s_max (int):
+        Default set to 12 inverse angstroms. Defines the maximum scattering range for consideration
+    evolutions (int):
+        Default set to 10. Defines the number of frequency iterations to calculate and plot
+    r_max (int):
+        Default set to 800 (picometers). Defines the maximum r distance for consideration
+    damp_const (int):
+        Default set to 33. Defines the size of the damping constant used in the Fourier transform
+    plot (boolean):
+        Default set to True. When true, plots the dI/I and PDF with respect to time and distance
+
+    RETURNS:
+    
+    dI_I (3d array):
+        calculated delta I/I for the frequency motion 
+    new_time (1d array):
+        time steps within the frequency calculation
+    s (1d array):
+        corresponding s values for the dI/I
+    PDF (3d array):
+        calculated pair distribution function for the frequency motion
+    r (1d array):
+        corresponding pair distances
+    """
+
+    coor_txyz,atom_sum,time=load_freq_xyz(path_mol,tra_mol_name,file_type) #load xyz data
+    nt=len(time)*evolutions
+    max_time = max(time)*evolutions
+    t_interval=float(time[1])-float(time[0])
+    new_time = np.linspace(0, max_time, nt)
+    # col=int(160/t_interval)
+    # space_for_convol=int(200/t_interval)
+        
+    I0,I0_at,I0_mol,s = get_I_from_xyz(coor_txyz[0],atom_sum, s_max)
+    dI_I= []
+    PDF = []
+    k = 0
+    for i in range(nt):
+        j = i%20
+        I,I_at,I_mol,s = get_I_from_xyz(coor_txyz[j],atom_sum, s_max)
+        dI_temp = (I-I0)/I
+        dI_I.append(dI_temp)
+        sM,pdf,r = get_sM_and_PDF_from_I(I_at,I_mol,s,r_max,damp_const)
+        PDF.append(pdf)
+    dI_I=np.array(dI_I)
+    PDF = np.array(PDF)
+    
+    if plot == True:
+        plt.figure(figsize=(15,10))
+
+        plt.subplot(2,1,1)
+        plt.pcolor(new_time, s, dI_I.T, cmap='bwr')
+        plt.colorbar()
+        plt.xlabel("time (fs)")
+        plt.ylabel("s")
+        plt.title("dI/I")
+
+        plt.subplot(2,1,2)
+        plt.pcolor(new_time, r, PDF.T, cmap='bwr')
+        plt.colorbar()
+        plt.xlabel("time (fs)")
+        plt.ylabel("r (pm)")
+        plt.ylim(50, 500)
+        plt.title("PDF")
+        plt.show()
+
+    return dI_I, new_time, s, PDF, r
+
+
+def dissoc_sim(path_mol, reactant, products, file_type, s_max=12, r_max=800, damp_const=33, plot=False):
+    """
+    Calculates the diffraction pattern of a dissociation reaction (or just any kind of structural change) from 2 or more structure files.
+    
+    ARGUMENTS:
+
+    path_mol (str):
+        path to the folder with the trajectory simulation
+    reactant (str):
+        name of reactant xyz file
+    products (list):
+        list of product xyz files
+    file_type (str):
+        '.xyz' or '.csv' but I think it only works with xyz currently 
+
+    OPTIONAL ARGUMENTS:
+
+    s_max (int):
+        Default set to 12 inverse angstroms. Defines the maximum scattering range for consideration
+    evolutions (int):
+        Default set to 10. Defines the number of frequency iterations to calculate and plot
+    r_max (int):
+        Default set to 800 (picometers). Defines the maximum r distance for consideration
+    damp_const (int):
+        Default set to 33. Defines the size of the damping constant used in the Fourier transform
+    plot (boolean):
+        Default set to True. When true, plots the dI/I and PDF with respect to time and distance
+
+    RETURNS:
+
+    dsM (2d array):
+        delta sM of products/reactant
+    s (1d array):
+        s values for dsM
+    dPDF (2d array):
+        delta PDF with products/reactant
+    r (1d array):
+        corresponding pair distances
+    """
+    coor0, atom_sum0 = load_static_mol_coor(path_mol, reactant, file_type)
+    I0, I0_at,I0_mol,s = get_I_from_xyz(coor0,atom_sum0, s_max)
+    sM0, pdf0, r = get_sM_and_PDF_from_I(I0_at,I0_mol,s,r_max,damp_const)
+    
+
+    I_prods = []
+    sM_prods = []
+    pdf_prods = []
+    for i in range(len(products)):
+        frag_name = str(products[i])
+        coor, atom_sum = load_static_mol_coor(path_mol, frag_name, file_type)
+        I,I_at,I_mol,s = get_I_from_xyz(coor, atom_sum, s_max)
+        I_prods.append(I)
+        sM,pdf,r = get_sM_and_PDF_from_I(I0_at,I_mol,s,r_max,damp_const)
+        pdf_prods.append(pdf)
+        sM_prods.append(sM)
+    
+    I_prods = np.sum(I_prods, axis=0)
+    sM_prods = np.sum(sM_prods, axis=0)
+    pdf_prods = np.sum(pdf_prods, axis=0)
+    dsM = s*(I_prods-I0)/I0_at
+    
+    if plot == True:
+        angs = '\u00C5' # Angstrom sign
+        plt.figure(figsize=(8,4))
+        
+        plt.subplot(1,2,1)
+        plt.plot(s, sM0, label = "reactant")
+        plt.plot(s, sM_prods, label="products")
+        plt.xlabel(r'S, ['+angs+'$^{-1}$]');plt.ylabel('sM(s)');
+        plt.legend()
+        plt.title("sM")
+        
+        plt.subplot(1,2,2)
+        plt.plot(r, pdf0, label="reactant")
+        plt.plot(r, pdf_prods, label="products")
+        plt.xlabel(r'R, [pm]');
+        plt.legend()
+        plt.title("PDF")
+
+    dPDF=[0 for i in range(r_max)]
+    for i in range(len(s)-1): 
+        dPDF+=dsM[i]*np.sin(s[i]*1e10*np.array(r)*1e-12)*(s[i+1]-s[i])*np.exp(-s[i]**2/damp_const)
+    
+    return dsM, s, dPDF, r
+
+
+def poly_fit(data_array, x_vals, return_baseline=False):
+    """
+    Calculates a polynomial fit of the data_array with respect to the x_vals. 
+
+    ARGUMENTS:
+
+    data_array (1d or 2d array):
+        1d or 2d data array to be fit, normally used on the dI/I or dI values after azimuthal averaging. Code checks the shape of the array
+    x_vals (1d array):
+        list of x values related to the data array (i.e., s values)
+
+    OPTIONAL ARGUMENTS:
+
+    degree (int):
+        default set to True. Defines the degree of the polynomial used for fitting
+    return_baseline (boolean):
+        default set to False. When true, returns both the corrected data and the calculated baseline
+    
+    RESULTS:
+    
+    corrected_data (2d array):
+        input 2d array - calculated baselines
+    baselines (2d array):
+        calculated baseline for each data set in the array. Only returned when return_baseline == True
+    
+    """
+
+    if len(data_array.shape) == 2:
+        baseline2d = []
+        for i in range(len(data_array)):
+            temp_data = np.copy(data_array[i])
+            idx_nan = ~np.isnan(temp_data)
+            coeff = np.polyfit(x_vals[idx_nan],temp_data[idx_nan],2)
+            baseline = np.polyval(coeff,x_vals)
+            baseline2d.append(baseline)
+
+        baseline2d = np.array(baseline2d)
+        corrected_data = data_array - baseline2d
+        
+    elif len(data_array.shape) == 1:
+        temp_data = data_array
+        idx_nan = ~ np.isnan(temp_data)
+        coeff = np.polyfit(x_vals[idx_nan], temp_data[idx_nan], 2)
+        baseline2d = np.polyval(coeff, x_vals)
+        
+        corrected_data = data_array - baseline2d
+    else:
+        print("Data Array must be 1D or 2D array")
+    if return_baseline == True:
+        return corrected_data, baseline2d
+    else:
+        return corrected_data
+
+
+def fit_high_s(data_array, x_vals, s_range, return_baseline=False):
+    if len(data_array.shape) == 2:
+        corrected_data = []
+        baseline = []
+        for i in range(len(data_array)):
+            temp_data = data_array[i]
+            coeff = np.polyfit(x_vals[s_range], temp_data[s_range], 2)
+            line = np.polyval(coeff, x_vals[s_range])
+            baseline.append(line)
+            data_array[i, s_range] = temp_data[s_range] - line
+            corrected_data.append(data_array[i])
+            
+    elif len(data_array.shape) == 1:
+        coeff = np.polyfit(x_vals[s_range], data_array[s_range], 1)
+        baseline = np.polyval(coeff, x_vals)
+        
+        corrected_data = data_array - baseline
+    else:
+        print("Data Array must be 1D or 2D array")
+    
+    corrected_data= np.array(corrected_data)
+    
+    if return_baseline == True:
+        return corrected_data, baseline
+    else:
+        return corrected_data
+    
+
+def remove_nan_from_data(s_exp,I_exp):
+    #this function is to cut off nans in the experimental data
+    start=0 #the parameter start reveals the end of nans
+    for i in range(len(I_exp)):
+        if np.isnan(I_exp[i]) or I_exp[i]==0:
+            I_exp[i]=0
+            start+=1
+        else:
+            break
+
+    I_exp=I_exp/I_exp.max()
+    #normalize experimental data
+    #if start==0:
+     #   I_exp1=I_exp
+      #  s1=s_exp
+    #else:
+    if start<20:
+        start=20
+    I_exp1=I_exp[start:]
+    s1=s_exp[start:]
+
+    return I_exp1,s1,start
+
+
+def get_2d_matrix(x, y):
+    # an easy way to set whatever matrix you want
+    d = []
+    for i in range(x):
+        d.append([])
+        for j in range(y):
+            d[i].append(0)
+    return d
+
+
+def get_3d_matrix(x, y, z):
+    # an easy way to set whatever matrix you want
+    matrix3d = []
+    for i in range(x):
+        matrix3d.append([])
+        for j in range(y):
+            matrix3d[i].append([])
+            for k in range(z):
+                matrix3d[i][j].append(0)
+    return matrix3d
+
+
+def high_freq_filter(cutoff_freq,s_interval,data):
+    fs=1/s_interval
+    nyq=0.5*fs
+    high=cutoff_freq/nyq
+    b,a=signal.butter(5,high,btype='high',analog=False)
+    filted_data = signal.filtfilt(b,a,data)
+    return filted_data
+
+
+def low_freq_filter(cutoff_freq,s_interval,data):
+    fs=1/s_interval
+    nyq=0.5*fs
+    low=cutoff_freq/nyq
+    b,a=signal.butter(5,low,btype='low',analog=False)
+    filted_data = signal.filtfilt(b,a,data)
+    return filted_data
+
+
+def plot_delay_matrix(M,norm='',title=''):
+    M=np.array(M)
+    M=Image.fromarray(M)
+    target_size=(200,150)
+    new_image=M.resize(target_size)
+    im=np.array(new_image)
+    
+    plt.figure(figsize=(12,8))
+    pc=plt.imshow(im,norm=norm,cmap=plt.get_cmap('seismic'),alpha=0.65)
+    plt.colorbar(pc)
+    ax=plt.gca()
+    plt.ylabel('delay',fontsize=20)
+    plt.title(title,fontsize=20)
+    plt.grid(axis='x',color='indigo',linestyle='--',linewidth=2)
+    plt.grid(axis='y',color='olive',linestyle=':',linewidth=1.5)
+    return
+
+
+def find_zeros(I_mol,s):
+    #this function is to find the s0 values at which the simulated I_mol equals 0
+    zero_count=0
+    zeros_max=30 #the total number of zero points should be no larger than this value
+    s01=[0 for i in range(zeros_max)]
+    for i in range(len(s)-1):
+        if I_mol[i]*I_mol[i+1]<=0:
+            #s01[zero_count]=s[i]
+            s01[zero_count]=(I_mol[i]*s[i+1]-I_mol[i+1]*s[i])/(I_mol[i]-I_mol[i+1])
+            zero_count+=1
+
+    s0=s01[0:zero_count]
+
+    return s0
+
+
+def find_near_zeros(sM,s):
+    #it is better to determine near zeros using sM instead of I_mol
+    #because I_mol approaches zero at large angles
+    zero_count=0
+    zeros_max=50 
+    s01=[0 for i in range(zeros_max)]
+    for i in range(len(s)-1):
+        if sM[i]*sM[i+1]<=0 and s[i]>1e-3 and s[i]-s01[zero_count-1]>0.1:
+            s01[zero_count]=(sM[i]*s[i+1]-sM[i+1]*s[i])/(sM[i]-sM[i+1])
+            zero_count+=1
+        if sM[i]*sM[i+1]>0 and abs(sM[i]/sM.max())<0.000001 and s[i]-s01[zero_count-1]>0.1: 
+            # abs(sM[i]/sM.max())<0.001 decides whether the point satisfies 'near zero'
+            # set a number much smaller than 0.001 if three zeros are too close to each other
+            # s[i]-s01[zero_count-1]>0.1 zeros too close to another are discarded
+            s01[zero_count]=s[i]
+            zero_count+=1
+
+    s0=s01[0:zero_count]
+    return s0
+
+
+def get_I_exp_at_zeros(s_exp,I_exp,s0):
+    m=0
+    filted_I_exp=low_freq_filter(1.5,s_exp[1]-s_exp[0],I_exp)
+    I_0=[0 for i in range(len(s0))]
+    for i in range(len(s_exp)-1):
+        if abs(s_exp[i]-s0[m])<3e-4:
+            I_0[m]=filted_I_exp[i]
+            m+=1
+            if m==len(s0):
+                break
+        elif abs(s_exp[i+1]-s0[m])<3e-4:
+            I_0[m]=filted_I_exp[i]
+            m+=1
+            if m==len(s0):
+                break
+        elif s_exp[i]<s0[m] and s_exp[i+1]>s0[m]:
+            I_0[m]=(filted_I_exp[i+1]-filted_I_exp[i])/(s_exp[i+1]-s_exp[i])*(s0[m]-s_exp[i+1])+filted_I_exp[i+1]
+            m+=1
+            if m==len(s0):
+                break
+    return I_0
+
+
+def fit_every_3_points(s0,I_0,s_exp):
+    A=np.empty(len(s0)-2)
+    B=np.empty(len(s0)-2)
+    C=np.empty(len(s0)-2)
+    I_frag=np.empty((len(s0)-2,len(s_exp)))
+    for i in range(len(s0)-2):
+        s1=s0[i]
+        s2=s0[i+1]
+        s3=s0[i+2]
+        g1=np.log(I_0[i])
+        g2=np.log(I_0[i+1])
+        g3=np.log(I_0[i+2])
+    
+        alpha1=(g2-g1)/(g3-g1)
+        alpha2=(g3-g1)/(g3-g2)
+        c=np.linspace(-3,3,800)
+        h=alpha1*(s3**c-s1**c)-s2**c+s1**c+alpha2*(s3**c-s2**c)-s3**c+s1**c
+        
+        c0=find_zeros(h,c)
+        
+        for j in c0:
+            if abs(j)>0.001:
+                c_zero=j
+
+        b=((g2-g1)/(s2**c_zero-s1**c_zero)+(g3-g1)/(s3**c_zero-s1**c_zero))/2
+        a=(g1-b*s1**c_zero+g2-b*s2**c_zero+g3-b*s3**c_zero)/3
+        A[i]=a
+        B[i]=b
+        C[i]=c_zero
+        I_frag[i]=np.exp(a+b*s_exp**c_zero)
+        
+    I_fit=[0 for i in range(len(s_exp))]
+    m=0
+    m_max=len(s0)-1
+    for i in range(len(s_exp)):
+        if s_exp[i]>=s0[m] and m<m_max:
+            m+=1
+        if m<=1:
+            I_fit[i]=I_frag[0,i]
+        if m>=len(s0)-1:
+            I_fit[i]=I_frag[m_max-2,i]
+        if m>1 and m<len(s0)-1:
+            I_fit[i]=I_frag[m-2,i]*(s_exp[i]-s0[m-1])/(s0[m]-s0[m-1])+I_frag[m-1,i]*(s0[m]-s_exp[i])/(s0[m]-s0[m-1])
+
+    return I_fit
+
+
+def fit_background(s0,I_0,s1):
+    def func(x,a,b,c,d):
+        return c*np.exp(-a*x**b)+d
+    xdata=np.array(s0)
+    ydata=np.array(I_0)
+    popt,pcov=curve_fit(func,xdata,ydata,p0=[1.3,0.7,1,1],maxfev = 10000,bounds=(0,[3,3,10,10]))
+    a=popt[0]
+    b=popt[1]
+    c=popt[2]
+    d=popt[3]
+    I_fit=c*np.exp(-a*s1**b)+d
+    return I_fit
+
+
+def rescale_along_y_axis(fstandard,ftoscale):
+    fstandard=np.array(fstandard)
+    ftoscale=np.array(ftoscale)
+    if len(fstandard)!=len(ftoscale):
+        print('error! fstandard and ftoscale should have the same length!')
+        return
+    scale=sum(fstandard**2)/sum(fstandard*ftoscale)
+    return ftoscale*scale,scale
+
+
+def retrieve_PDF(left,right,s_interval1,f,s000,s_max,coor,atom_sum,damp_const,r_max,I_exp):
+    s_exp=np.linspace(0,(len(I_exp)-1)*s_interval1,len(I_exp))
+    I,I_at,I_mol=get_I_for_exp_from_mol_coor(f,s000,s_exp,coor,atom_sum)
+    I_exp1,s1,start=remove_nan_from_data(s_exp,I_exp)
+    I_at1=I_at[start:]
+    sM,PDF,r=get_sM_and_PDF_from_I(I_at,I_mol,s_exp,r_max,damp_const)
+    s0=find_near_zeros(sM,s_exp)
+    print('zeros:')
+    print(s0)
+    
+    for i in range(len(s_exp)):
+        if s_exp[i]>=s0[0]:
+            start1=i
+            break
+    cut=start1-start
+    I_0=get_I_exp_at_zeros(s1,I_exp1,s0)
+    #I_fit=fit_background(s0,I_0,s1)
+    I_fit=fit_every_3_points(s0,I_0,s1)
+
+    I_mol_ret=I_exp1-I_fit
+    I_mol_ret_filted=low_freq_filter(1.5,s_interval1,I_mol_ret)#filt high frequency noices
+    sM_ret,PDF_awful,r=get_sM_and_PDF_from_I(I_at1,I_mol_ret_filted,s1,r_max,damp_const)
+    sM_ret=sM_ret/sM_ret.max()
+    
+    I1,I_at1,I_mol1,s11=get_I_from_xyz(f,s000,s_max,coor,atom_sum)
+    sM1,PDF1,r=get_sM_and_PDF_from_I(I_at1,I_mol1,s11,r_max,damp_const)
+
+    sM_combined=np.empty(len(s_exp))
+    sM_combined[start1:]=sM_ret[cut:]
+    
+    j=0
+    for i in range(len(s_exp)):
+        if s_exp[i]>=left and j==0:
+            st=i
+            j=1
+        if s_exp[i]>=right:
+            en=i
+            break
+
+    st1=st-start
+    en1=en-start
+    #sM_ret1,sc1=rescale_along_y_axis(sM[st:en],sM_ret[st1:en1])
+    #sMscale=1/sc1
+    sMscale=1/(sum(abs(sM[st:en]))/sum(abs(sM_ret[st1:en1])))
+    
+    sM_combined[:start1]=sM[:start1]*sMscale
+
+    PDF_ret=[0 for i in range(r_max)]
+    for i in range(len(s_exp)-1): 
+        PDF_ret+=sM_combined[i]*np.sin(s_exp[i]*1e10*np.array(r)*1e-12)*(s_exp[i+1]-s_exp[i])*np.exp(-s_exp[i]**2/damp_const)
+    
+    PDF_ret_scaled,sc3=rescale_along_y_axis(PDF1,PDF_ret)
+    fig=plt.figure(figsize=(8,4))
+    # fig.set_size_inches(10,5)
+    plt.subplot(121)
+    plt.plot(s1,I_exp1,label='experimental data')
+    plt.scatter(s0,I_0)
+    plt.plot(s1,I_fit,label='fitted background')
+    plt.plot(s1,I_mol_ret,label='retrieved I_mol')
+    plt.grid()
+    plt.legend(loc="best")
+    plt.xlabel('s/angs^-1')
+    plt.title('fit scattering background')
+
+    plt.subplot(122)
+    plt.plot(s_exp,sM*sMscale,label='simulation',linestyle='--',linewidth='3')
+    plt.plot(s1,sM_ret,label='experiment',linewidth='2')
+    plt.axvline(x=s_exp[st],linestyle='--',color='firebrick',label='rescale begin')
+    plt.axvline(x=s_exp[en],linestyle='--',color='firebrick',label='rescale end')
+    plt.title('retrieved sM')
+    plt.grid()
+    plt.xlabel('s/angs^-1')
+    #plt.legend(loc="best")
+    plt.show()
+    
+    fig=plt.figure(figsize=(8,4))
+    # fig.set_size_inches(10,5)
+    plt.subplot(121)
+    plt.plot(s11,sM1*np.exp(-s11**2/damp_const),label='simulation',linestyle='--',linewidth='3')
+    plt.plot(s_exp,sM_combined/(sum(abs(sM_combined[st:en]))/sum(abs(sM1[st:en])))*np.exp(-s_exp**2/damp_const),label='experiment',linewidth='2')
+    plt.legend()
+    plt.title('damped sM')
+    plt.axvline(x=s_exp[start1],linestyle='--',color='black',label='cut')
+    plt.axvline(x=s_exp[st],linestyle='--',color='firebrick')
+    plt.axvline(x=s_exp[en],linestyle='--',color='firebrick')
+    plt.legend(loc="best")
+    plt.grid()
+    plt.xlabel('s/angs^-1')
+    
+    plt.subplot(122)
+    plt.plot(r,PDF1,label='simulation',linestyle='--',linewidth='3')
+    plt.plot(r,PDF_ret_scaled,label='experiment',linewidth='2.5')
+    plt.title('retrieved ground state PDF')
+    plt.legend(loc="best")
+    plt.grid()
+    plt.xlabel('r/pm')
+    plt.tight_layout()
+    plt.show()
+    
+    return
+
+
+def sM_err(left,right,s_interval1,f,s000,s_max,coor,atom_sum,damp_const,r_max,I_exp):
+    s_exp=np.linspace(0,(len(I_exp)-1)*s_interval1,len(I_exp))
+    I,I_at,I_mol=get_I_for_exp_from_mol_coor(f,s000,s_exp,coor,atom_sum)
+    I_exp1,s1,start=remove_nan_from_data(s_exp,I_exp)
+    I_at1=I_at[start:]
+    sM,PDF,r=get_sM_and_PDF_from_I(I_at,I_mol,s_exp,r_max,damp_const)
+    s0=find_near_zeros(sM,s_exp)
+    
+    for i in range(len(s_exp)):
+        if s_exp[i]>=s0[0]:
+            start1=i
+            break
+    cut=start1-start
+    I_0=get_I_exp_at_zeros(s1,I_exp1,s0)
+    #I_fit=fit_background(s0,I_0,s1)
+    I_fit=fit_every_3_points(s0,I_0,s1)
+
+    I_mol_ret=I_exp1-I_fit
+    I_mol_ret_filted=low_freq_filter(1.5,s_interval1,I_mol_ret)#filt high frequency noices
+    sM_ret=s1*I_mol_ret_filted/I_at1
+
+    j=0
+    for i in range(len(s_exp)):
+        if s_exp[i]>=left and j==0:
+            st=i
+            j=1
+        if s_exp[i]>=right:
+            en=i
+            break
+    st1=st-start
+    en1=en-start
+
+    s_good=s_exp[st:en]
+    #sMscale=1/(sum(abs(sM[st:en]))/sum(abs(sM_ret[st1:en1])))
+    
+    sM_ret1,sc1=rescale_along_y_axis(sM[st:en],sM_ret[st1:en1])
+
+    r=scipy.stats.mstats.pearsonr(sM_ret1*np.exp(-s_good**2/damp_const),sM[st:en]*np.exp(-s_good**2/damp_const))
+    #r=mstats.pearsonr(sM_ret[st1:en1],sM_sim*sMscale)
+    
+    return r[0]
+
+
+def scan_s_calibration(scmin,scmax,left,right,f,s000,s_max,coor,atom_sum,damp_const,r_max,I_ground_state):
+    #uses sM_err function
+    interval1=0.0002
+    interval2=0.00002
+    R1=np.empty(int((scmax-scmin)/interval1))
+    R2=np.empty(int(2*interval1/interval2))
+    for i in range(int((scmax-scmin)/interval1)):
+        R1[i]=sM_err(left,right,scmin+i*interval1,f,s000,s_max,coor,atom_sum,damp_const,r_max,I_ground_state)
+
+    a=np.where(R1==R1.max())
+    s_calibration1=scmin+interval1*int(a[0])
+
+    for i in range(int(2*interval1/interval2)):
+        R2[i]=sM_err(left,right,s_calibration1-interval1+i*interval2,f,s000,s_max,coor,atom_sum,damp_const,r_max,I_ground_state)
+
+    x=np.linspace(-2,2,5)
+    h=np.exp(-x**2/200)
+    c=signal.convolve(R2,h,mode='same')
+    c=c[2:-2]
+
+    b=np.where(c==c.max())
+    s_calibration2=s_calibration1-interval1+interval2*(int(b[0])+2)
+    print('s_calibration:',s_calibration2,'angs^-1/pixel')
+    #print('pearson_r:',R2[int(b[0])+2])
+    return s_calibration2
+
+
+def correct_offset(dI, x=300):
+    #dI = (I_norm - I_ref)
+    corrected = []
+    for i in range(len(dI)):
+        ends = np.nanmean(dI[i][x:])
+        correct = dI[i]- ends
+        corrected.append(correct)
+        
+    corrected = np.array(corrected)
+    plt.figure()
+    plt.plot(dI[-1][300:], label = "original")
+    plt.plot(corrected[-1][300:], label="corrected")
+    plt.legend()
+    plt.title("Corrected data")
+    plt.show()
+    return corrected
+
+
+def get_sM(f, s000, s_exp, coor, atom_sum, dI):
+    I_at_all = []
+    s000 = s000*1e-10
+    for i in range(atom_sum):
+        I_atomic = []
+        I_at = 0
+        amps = f[int(coor[i,4])]
+        #print(amps)
+        interp_amps = interp.interp1d(s000[0:125], amps[0:125])
+        amps_new = interp_amps(s_exp)
+        for k in range(len(amps_new)):
+            f_new = amps_new[k]
+            I_at = np.abs(f_new)**2
+            I_atomic.append(float(I_at))
+        I_at_all.append(I_atomic)
+    I_at = sum(np.array(I_at_all))
+    
+    sM_new = []              
+    for i in range(len(dI)):
+        sM_temp = s_exp*(dI[i])/I_at
+        temp_mean = np.nanmean(sM_temp[25:30])
+        slope = temp_mean/25
+        sM_temp[0:25] = np.arange(0,25)*slope
+        sM_new.append(sM_temp)
+
+    sM = np.array(sM_new)/np.nanmax(np.array(sM_new))
+    return(sM)
+
+
+def get_exp_PDF(sM, s_exp, r_max, s_cali):
+    smax=np.max(s_exp);
+    s1=len(sM);
+    ds=s_cali; # step size of s 
+    print(ds)
+    rmax=10; # in angstroms
+    r=np.linspace(0,rmax,np.round(1000));
+
+    pdf_exp = []
+    for i in range(len(sM)):
+        sM_new=sM[i]*np.exp(-ds*(s_exp**2));
+        #print(len(sM_new))
+        fr_temp = []
+        for j in range(len(r)):
+            fr=np.nansum(sM_new*np.sin(r[j]*s_exp))*ds
+            fr_temp.append(fr)
+        fr_temp = np.array(fr_temp)
+        #print(len(fr_temp))
+        pdf_exp.append(fr_temp)
+        #     % Calculating fourier transform of theory
+    pdf_exp = np.array(pdf_exp)
+    return pdf_exp, r
