@@ -152,7 +152,7 @@ def import_DCS(max_at_no=55):
 FORM_FACTORS = import_DCS()
 S_THEORY = import_s()
 
-def load_molecular_structure(path_mol, mol_name, file_type):
+def load_molecular_structure(path_mol, mol_name, file_type = [], mol2_str = None):
     """ Reads in either a .csv or .xyz file containing moleculear coordinates and adds a column containing the atomic number using the 
     hidden function _get_modified_coor for each atom in the molecule. When reading in an .xyz file runs the hidden function _load_xyz. 
     Errors are thrown if an improper file type is chosen or if the .xyz or .csv file needs further formatting.
@@ -188,12 +188,34 @@ def load_molecular_structure(path_mol, mol_name, file_type):
         num = np.array(coor[:,3])
         atom_sum = int(len(num))
         coor = _get_modified_coor(coor, atom_sum, file_type)
-
+    if file_type == None and type(mol2_str) == str:
+        coor, atom_sum = mol2_to_xyz(mol2_str)
+        coor = _get_modified_coor(coor, atom_sum)
     elif file_type!='.csv' and file_type!='.xyz':
         print('error! Please type in the right molecular coordinate file type, .xyz or .csv')
+
         
     return coor,atom_sum
 
+def mol2_to_xyz(mol2_str):
+    atoms_section = False
+    coor = []
+
+    mol2_str = mol2_str.split('\n')
+    start = 4 
+    max_line = len(mol2_str)
+    for i in range(start, max_line):
+        string = mol2_str[i].split()
+        #print(string)
+        if len(string) > 10:
+            atom_name = string[3]
+            x = np.float64(string[0])
+            y = np.float64(string[1])
+            z = np.float64(string[2])
+            coor.append([atom_name, x, y, z])
+    coor = np.array(coor)
+    atom_sum = len(coor)
+    return coor, atom_sum
 
 def _load_xyz(xyz_file):
     """
@@ -293,7 +315,7 @@ def load_freq_xyz(path_mol, mol_name, file_type):
     return re, atom_sum, time
 
 
-def _get_modified_coor(coor, atom_sum, file_type):
+def _get_modified_coor(coor, atom_sum):
     """ 
     Appends a column of atomic numbers to the coordinate array read from the .xyz file
     
@@ -311,15 +333,9 @@ def _get_modified_coor(coor, atom_sum, file_type):
         N x 5 array where N = # of atoms. Column 0 contains the atomic symbol, columns 1, 2, and 3 contain x, y, and z coordinates
         and column 4 contains the atomic number. 
     """
-    if file_type == '.xyz':
-        atom_num=[0 for i in range(atom_sum)]
-        for i in range(atom_sum):
-            atom_num[i]=sym_to_no(coor[i][0])
-    
-    if file_type == '.csv':
-        atom_num=[0 for i in range(atom_sum)]
-        for i in range(atom_sum):
-            atom_num[i]=sym_to_no(coor[i,0])
+    atom_num=[0 for i in range(atom_sum)]
+    for i in range(atom_sum):
+        atom_num[i]=sym_to_no(coor[i][0])
             
     atom_num=np.array(atom_num)
     atom_num=atom_num[:,np.newaxis]
