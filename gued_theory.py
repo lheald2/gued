@@ -179,7 +179,7 @@ def load_molecular_structure(path_mol, mol_name, file_type = [], mol2_str = None
 
     if file_type=='.xyz':
         coor_xyz, atom_sum = _load_xyz(filename)
-        coor = _get_modified_coor(coor_xyz, atom_sum, file_type)
+        coor = _get_modified_coor(coor_xyz, atom_sum)
         
     if file_type =='.csv':
         mol_filename = mol_name+'.csv'
@@ -187,7 +187,7 @@ def load_molecular_structure(path_mol, mol_name, file_type = [], mol2_str = None
         coor = np.array(coor_M)
         num = np.array(coor[:,3])
         atom_sum = int(len(num))
-        coor = _get_modified_coor(coor, atom_sum, file_type)
+        coor = _get_modified_coor(coor, atom_sum)
     if file_type == None and type(mol2_str) == str:
         coor, atom_sum = mol2_to_xyz(mol2_str)
         coor = _get_modified_coor(coor, atom_sum)
@@ -196,6 +196,7 @@ def load_molecular_structure(path_mol, mol_name, file_type = [], mol2_str = None
 
         
     return coor,atom_sum
+
 
 def mol2_to_xyz(mol2_str):
     atoms_section = False
@@ -216,6 +217,7 @@ def mol2_to_xyz(mol2_str):
     coor = np.array(coor)
     atom_sum = len(coor)
     return coor, atom_sum
+
 
 def _load_xyz(xyz_file):
     """
@@ -652,7 +654,7 @@ def load_time_evolving_xyz(path_mol, mol_name, file_type):
         n = 0
     print(len(coor_txyz[0][0]))
     for i in range(time_count):
-        coor1 = _get_modified_coor(coor_txyz[i][:][:], atom_sum, file_type)
+        coor1 = _get_modified_coor(coor_txyz[i][:][:], atom_sum)
         coor_txyz[i] = coor1
 
     return np.array(coor_txyz), atom_sum, time
@@ -1341,7 +1343,7 @@ def get_exp_sM_PDF(coor, atom_sum, s_exp, dI, freq_filter=False, polyfit=False, 
         nan_num = sum(np.isnan(dI[i]))
         sM_temp = s_exp*(dI[i])/I_at
         temp_mean = np.nanmean(sM_temp[nan_num:nan_num+5])
-        slope = temp_mean/25
+        slope = temp_mean/nan_num
         sM_temp[0:nan_num] = np.arange(0,nan_num)*slope
         sM_new.append(sM_temp)
     sM = np.array(sM_new)/np.nanmax(np.array(sM_new))  # Normalized?

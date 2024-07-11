@@ -39,6 +39,8 @@ import warnings
 # Suppress warnings about mean of empty slice and degrees of freedome for empty slice (warnings normally appear when taking azimuthal average)
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='Mean of empty slice')
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='Degrees of freedom <= 0 for slice')
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='divide by zero encountered in log')
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='invalid value encountered in log')
 
 
 
@@ -652,7 +654,7 @@ def remove_background_pool(data_array, remove_noise=True, plot=False):
     backgrounds = np.array(backgrounds)
 
     if plot == True:   
-        fig, axes = plt.subplots(1, 3, figsize=(12, 6))
+        fig, axes = plt.subplots(1, 3, figsize=FIGSIZE)
         vmin_1_1, vmax_1_1 = 10**-0, 4000 
 
         #Before
@@ -753,7 +755,7 @@ def remove_xrays(data_array, plot=True): # testing for timing
     pct_rmv = np.array(amt_rmv) / (len(data_array[1]) * len(data_array[2])) * 100
 
     if plot == True:
-        plt.figure()
+        plt.figure(figsize=FIGSIZE)
         plt.subplot(1, 3, 1)
         plt.plot(pct_rmv)
         plt.title("Percent Pixels Removed")
@@ -815,7 +817,7 @@ def remove_xrays_pool(data_array, plot=True, std_factor=STD_FACTOR):
     pct_rmv = np.array(amt_rmv) / (len(data_array[1]) * len(data_array[2])) * 100
 
     if plot == True:
-        plt.figure()
+        plt.figure(figsize=FIGSIZE)
         plt.subplot(1, 3, 1)
         plt.plot(pct_rmv)
         plt.title("Percent Pixels Removed")
@@ -860,7 +862,7 @@ def subtract_background(data_array, mean_background, plot=True):
     clean_data = data_array - mean_background
 
     if plot == True:
-        plt.figure()
+        plt.figure(figsize=FIGSIZE)
         plt.subplot(1, 2, 1)
         plt.imshow(data_array[0])
         plt.title("Original Image")
@@ -927,6 +929,7 @@ def remove_based_on_center(centers, data_array, stage_positions, std_factor=2, p
 
     return new_array, new_stage_positions, new_centers
 
+    
 # Masking and Center Finding Functions
 
 def mask_generator_alg(image, fill_value=np.nan, add_rectangular=False, plot=False):
@@ -982,7 +985,7 @@ def mask_generator_alg(image, fill_value=np.nan, add_rectangular=False, plot=Fal
         # 515
 
     if plot == True:
-        fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+        fig, axs = plt.subplots(1, 3, figsize=FIGSIZE)
 
         # First subplot: Mean of Unmasked Data Array
         axs[0].imshow(image)
@@ -1016,13 +1019,12 @@ def mask_generator_alg(image, fill_value=np.nan, add_rectangular=False, plot=Fal
     return mask
 
 
-def apply_mask(data_array, fill_value=np.nan, add_rectangular=False,
-               plot=False):  # todo change mask parameters to global variables
+def apply_mask(data_array, fill_value=np.nan, add_rectangular=False, plot=False, print_vals=False):  
     """ Applies a mask to individual images in the data array.
 
     ARGUMENTS:
 
-    data_array_1d : 2D array
+    data_array: 2D array
         Diffraction pattern.
 
     OPTIONAL ARUGMENTS:
@@ -1049,45 +1051,93 @@ def apply_mask(data_array, fill_value=np.nan, add_rectangular=False,
         Result of all the masks in an image.
 
     """
-    mean_data = np.nanmean(data_array, axis=0)
-    masked_data = data_array * mask_generator_alg(mean_data, fill_value, add_rectangular)
-    masked_mean = np.nanmean(masked_data, axis=0)
 
-    if plot == True:
-        fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+    if len(data_array.shape) == 2:
+        masked_data = data_array * mask_generator_alg(data_array, fill_value, add_rectangular)
 
-        # First subplot: Mean of Unmasked Data Array
-        axs[0].imshow(mean_data)
-        axs[0].set_title("Mean of Unmasked Data Array")
-        cbar = plt.colorbar(axs[0].imshow(mean_data), ax=axs[0])
-        cbar.ax.set_ylabel('Intensity')
+        if plot == True:
+            fig, axs = plt.subplots(1, 3, figsize=FIGSIZE)
 
-        # Second subplot: Mean of Masked Data Array
-        axs[1].imshow(masked_mean)
-        axs[1].set_title("Mean of Masked Data Array")
-        cbar = plt.colorbar(axs[1].imshow(masked_mean), ax=axs[1])
-        cbar.ax.set_ylabel('Intensity')
+            # First subplot: Mean of Unmasked Data Array
+            axs[0].imshow(data_array)
+            axs[0].set_title("Mean of Unmasked Data Array")
+            cbar = plt.colorbar(axs[0].imshow(data_array), ax=axs[0])
+            cbar.ax.set_ylabel('Intensity')
 
-        # Third subplot: Contour map of average data
-        x = np.arange(300, 700)
-        y = np.arange(300, 700)
-        X, Y = np.meshgrid(y, x)
-        pc = axs[2].pcolormesh(x, y, np.log(masked_mean[300:700, 300:700]), shading='auto')
-        cs = axs[2].contour(X, Y, np.log(masked_mean[300:700, 300:700]), levels=20, colors='w')
-        axs[2].set_title('Contour map of average data')
-        cbar = fig.colorbar(pc, ax=axs[2])
-        cbar.ax.set_ylabel('Log(Intensity)')
+            # Second subplot: Mean of Masked Data Array
+            axs[1].imshow(masked_data)
+            axs[1].set_title("Mean of Masked Data Array")
+            cbar = plt.colorbar(axs[1].imshow(masked_data), ax=axs[1])
+            cbar.ax.set_ylabel('Intensity')
 
-        # Adjust layout to prevent overlap
-        plt.tight_layout()
+            # Third subplot: Contour map of average data
+            x = np.arange(300, 700)
+            y = np.arange(300, 700)
+            X, Y = np.meshgrid(y, x)
+            pc = axs[2].pcolormesh(x, y, np.log(masked_data[300:700, 300:700]), shading='auto')
+            cs = axs[2].contour(X, Y, np.log(masked_data[300:700, 300:700]), levels=20, colors='w')
+            axs[2].set_title('Contour map of average data')
+            cbar = fig.colorbar(pc, ax=axs[2])
+            cbar.ax.set_ylabel('Log(Intensity)')
 
-        # Show the combined figure
-        plt.show()
+            # Retrieve and print the intensity values of the contour lines
+            if print_vals == True:
+                intensity_values = np.exp(cs.levels)
+                for value in intensity_values:
+                    print(f"Intensity value: {value:.2f}")
+
+            # Adjust layout to prevent overlap
+            plt.tight_layout()
+
+            # Show the combined figure
+            plt.show()
+        
+    if len(data_array.shape) == 3:
+        mean_data = np.nanmean(data_array, axis=0)
+        masked_data = data_array * mask_generator_alg(mean_data, fill_value, add_rectangular)
+        masked_mean = np.nanmean(masked_data, axis=0)
+
+        if plot == True:
+            fig, axs = plt.subplots(1, 3, figsize=FIGSIZE)
+
+            # First subplot: Mean of Unmasked Data Array
+            axs[0].imshow(mean_data)
+            axs[0].set_title("Mean of Unmasked Data Array")
+            cbar = plt.colorbar(axs[0].imshow(mean_data), ax=axs[0])
+            cbar.ax.set_ylabel('Intensity')
+
+            # Second subplot: Mean of Masked Data Array
+            axs[1].imshow(masked_mean)
+            axs[1].set_title("Mean of Masked Data Array")
+            cbar = plt.colorbar(axs[1].imshow(masked_mean), ax=axs[1])
+            cbar.ax.set_ylabel('Intensity')
+
+            # Third subplot: Contour map of average data
+            x = np.arange(300, 700)
+            y = np.arange(300, 700)
+            X, Y = np.meshgrid(y, x)
+            pc = axs[2].pcolormesh(x, y, np.log(masked_mean[300:700, 300:700]), shading='auto')
+            cs = axs[2].contour(X, Y, np.log(masked_mean[300:700, 300:700]), levels=20, colors='w')
+            axs[2].set_title('Contour map of average data')
+            cbar = fig.colorbar(pc, ax=axs[2])
+            cbar.ax.set_ylabel('Log(Intensity)')
+
+            # Retrieve and print the intensity values of the contour lines
+            if print_vals == True:
+                intensity_values = np.exp(cs.levels)
+                for value in intensity_values:
+                    print(f"Intensity value: {value:.2f}")
+
+            # Adjust layout to prevent overlap
+            plt.tight_layout()
+
+            # Show the combined figure
+            plt.show()
 
     return masked_data
 
 
-def finding_center_alg(image, plot=False, title='Reference Image', thresh_input=0):
+def finding_center_alg(image, thresh_input=THRESHOLD, plot=False, title='Reference Image'):
     """
     Algorithm for finding the center of diffraction pattern
 
@@ -1098,6 +1148,8 @@ def finding_center_alg(image, plot=False, title='Reference Image', thresh_input=
 
     OPTIONAL ARGUMENTS:
 
+    thresh_input (float):
+        Default set to 0. When zero, the threshold value is calculated using threshold_otsu from scikit-images. Often doesn't work
     plot : boolean, optional
         Show figure of the result of center finding. The default is False.
     title : str, optional
@@ -1155,7 +1207,7 @@ def finding_center_alg(image, plot=False, title='Reference Image', thresh_input=
     center_y = np.mean(cyt)
 
     if plot == True:
-        fig, (ax1, ax2, ax3) = plt.subplots(nrows=1, ncols=3, figsize=(20, 10))
+        fig, (ax1, ax2, ax3) = plt.subplots(nrows=1, ncols=3, figsize=FIGSIZE)
         ax1.imshow(image)
         ax2.imshow(label_image)
         ax3.imshow(bw)
@@ -1222,31 +1274,51 @@ def find_center_pool(data_array, plot=True, print_stats=True):
 
     center_x = []
     center_y = []
+    radii = []
+    thresholds = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
         results = executor.map(finding_center_alg, data_array)
 
     for result in results:
-        cx, cy, _, _ = result
+        cx, cy, radius, thresh = result
         center_x.append(cx)
         center_y.append(cy)
+        radii.append(radius)
+        thresholds.append(thresh)
 
     center_x = np.array(center_x)
     center_y = np.array(center_y)
+    radii = np.array(radii)
+    thresholds = np.array(thresholds)
     if plot == True:
         plt.figure(figsize=(12, 6))
-        plt.subplot(2, 1, 1)
+        plt.subplot(2, 2, 1)
         plt.plot(center_x[:])
         plt.title("X values for Centers")
         plt.xlabel("Image Number")
         plt.ylabel("Pixel Value")
 
-        plt.subplot(2, 1, 2)
-        plt.plot(center_y[:-3])
+        plt.subplot(2, 2, 2)
+        plt.plot(center_y[:])
         plt.title("Y values for Centers")
         plt.xlabel("Image Number")
         plt.ylabel("Pixel Value")
 
+        plt.subplot(2,2,3)
+        plt.plot(radii[:])
+        plt.title("Radii found during center finding")
+        plt.xlabel("Image Number")
+        plt.ylabel("Radius")
+
+        plt.subplot(2,2,4)
+        plt.plot(thresholds[:])
+        plt.title("Threshold Values")
+        plt.xlabel("Image Number")
+        plt.ylabel("Thresholds")
+
+        plt.tight_layout()
         plt.show()
+
     if print_stats == True:
         x_ave = np.mean(center_x[np.where(center_x != CENTER_GUESS[0])[0]])
         y_ave = np.mean(center_y[np.where(center_y != CENTER_GUESS[1])[0]])
@@ -1373,7 +1445,7 @@ def median_filter_pool(data_array, plot=True):
     filtered_data = np.array(filtered_data)
 
     if plot == True:
-        plt.figure()
+        plt.figure(figsize=FIGSIZE)
         plt.subplot(1,2,1)
         plt.imshow(data_array[0])
         plt.title("Original Image")
@@ -1499,7 +1571,7 @@ def remove_radial_outliers_pool(data_array, centers, plot=False):
     rmv_count = np.array(rmv_count)
 
     if plot == True:
-        plt.figure()
+        plt.figure(figsize=FIGSIZE)
         plt.subplot(1, 3, 1)
         plt.imshow(data_array[0])
         # plt.xlim(300, 600)

@@ -25,7 +25,7 @@ if __name__ == "__main__":
     print('Loading diffraction signal');
     all_data, all_stages, all_orders, all_counts = gued.get_image_details(files, sort=True, filter_data=False, plot=False)
 
-    exp_label = "junk"
+    exp_label = "o-ntph_data"
     today = date.today()
     print(today)
 
@@ -34,7 +34,7 @@ if __name__ == "__main__":
     group_name = "s1"
     #group_name = "s4"
 
-    group_size = 300
+    group_size = 200
     groups = np.arange(0, len(all_data)+1, group_size)
 
     start = time.perf_counter()
@@ -59,6 +59,7 @@ if __name__ == "__main__":
         center_x, center_y = gued.find_center_pool(data_array, plot=False)
         centers = list(zip(center_x, center_y))
         average_center = np.mean(centers, axis=0)
+        average_center = [455, 460]
         print(f"Average center of data set {i} is ({average_center[0]:.2f}, {average_center[1]:.2f})")
 
         print(f"Removing background for files {groups[i]} to {groups[i+1]}")
@@ -72,7 +73,7 @@ if __name__ == "__main__":
 
         print(f"Removing Radial Outliers for files {groups[i]} to {groups[i+1]}")
         
-        cleaned_data = gued.remove_radial_outliers_pool(data_array, centers, plot=False)
+        cleaned_data = gued.remove_radial_outliers_pool(data_array, average_center, plot=False)
 
         data_array = cleaned_data 
         del cleaned_data
@@ -84,7 +85,7 @@ if __name__ == "__main__":
         del clean_data
         
         print(f"Calculating the Azimuthal average and Normalizing for files {groups[i]} to {groups[i+1]}")
-        norm_data, norm_std = gued.get_azimuthal_average_pool(data_array, centers, normalize=True, plot=False)
+        norm_data, norm_std = gued.get_azimuthal_average_pool(data_array, average_center, normalize=True, plot=False)
 
         print(f"Saving Data for files {groups[i]} to {groups[i+1]} as run number {i}")
         # Make dictionary for saving to h5 file
