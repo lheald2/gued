@@ -54,26 +54,29 @@ if __name__ == "__main__":
         print(f"Filtering based on counts for files {groups[i]} to {groups[i+1]}")
         data_array, stage_positions, file_order, counts = gued.remove_counts(data_array, stage_positions, file_numbers, 
                                                                              counts, added_range=[], plot=False)
-        
-        print(f"Finding center for files {groups[i]} to {groups[i+1]}")
-        center_x, center_y = gued.find_center_pool(data_array, plot=False)
-        centers = list(zip(center_x, center_y))
-        average_center = np.mean(centers, axis=0)
-        average_center = [455, 460]
-        print(f"Average center of data set {i} is ({average_center[0]:.2f}, {average_center[1]:.2f})")
 
         print(f"Removing background for files {groups[i]} to {groups[i+1]}")
         data_array = gued.remove_background_pool(data_array, remove_noise=True, plot=False)
 
         print(f"Removing xrays for files {groups[i]} to {groups[i+1]}")
-        data_array = gued.remove_xrays_pool(data_array, plot=False)
+        data_array, pct_xrays = gued.remove_xrays_pool(data_array, plot=False, return_pct=True)
 
-        print(f"Masking Data for files {groups[i]} to {groups[i+1]}")
-        data_array = gued.apply_mask(data_array, plot=False)
+        print(f"Masking Data with 0.0 value for files {groups[i]} to {groups[i+1]}")
+        data_array = gued.apply_mask(data_array, fill_value=0.0, plot=False)
+
+        print(f"Finding center for files {groups[i]} to {groups[i+1]}")
+        center_x, center_y = gued.find_center_pool(data_array, plot=False)
+        centers = list(zip(center_x, center_y))
+        average_center = np.mean(centers, axis=0)
+        #average_center = [455, 460]
+        print(f"Average center of data set {i} is ({average_center[0]:.2f}, {average_center[1]:.2f})")
+
+        print(f"Remasking Data with np.nan value for files {groups[i]} to {groups[i+1]}")
+        data_array = gued.apply_mask(data_array, fill_value=np.nan, plot=False)
 
         print(f"Removing Radial Outliers for files {groups[i]} to {groups[i+1]}")
         
-        cleaned_data = gued.remove_radial_outliers_pool(data_array, average_center, plot=False)
+        cleaned_data, pct_outliers = gued.remove_radial_outliers_pool(data_array, centers, plot=False, return_pct=True)
 
         data_array = cleaned_data 
         del cleaned_data
@@ -85,13 +88,21 @@ if __name__ == "__main__":
         del clean_data
         
         print(f"Calculating the Azimuthal average and Normalizing for files {groups[i]} to {groups[i+1]}")
-        norm_data, norm_std = gued.get_azimuthal_average_pool(data_array, average_center, normalize=True, plot=False)
+        norm_data, norm_std = gued.get_azimuthal_average_pool(data_array, centers, normalize=True, plot=False)
 
         print(f"Saving Data for files {groups[i]} to {groups[i+1]} as run number {i}")
         # Make dictionary for saving to h5 file
 
-        data_dictionary = {'I': norm_data, 'stage_positions': stage_positions, 'centers': centers}
-        data_note = "Using average center value"
+        data_dictionary = {
+            'clean_images': data_array,
+            'I': norm_data, 
+            'stage_positions': stage_positions, 
+            'centers': centers, 
+            'total_counts': counts, 
+            'percent_xrays': pct_xrays, 
+            'percent_outliers': pct_outliers}
+        
+        data_note = "Using center value for each image"
         gued.save_data(file_name, group_name, i, data_dictionary, group_note=data_note)
         del data_array, stage_positions, file_numbers, counts, counts_mean, counts_std
 

@@ -775,7 +775,7 @@ def remove_xrays(data_array, plot=True): # testing for timing
     return clean_data
 
 
-def remove_xrays_pool(data_array, plot=True, std_factor=STD_FACTOR):
+def remove_xrays_pool(data_array, plot=False, return_pct = False, std_factor=STD_FACTOR):
     """
     Filters out any pixels that are more than set threshold value based on the standard deviation of the
     average pixel value by running the hidden function _remove_xrays in parallel.
@@ -789,6 +789,8 @@ def remove_xrays_pool(data_array, plot=True, std_factor=STD_FACTOR):
 
     plot (boolean): 
         Default set to True. Plots the percentage of pixeled removed during cleaning process
+    return_pct (boolean):
+        Default is set to False. When true, returns the pct removed along with the clean_data
     std_factor (int): 
         Default set to 3. Defines the threshold for removing pixels with |pixel_value - mean| > std_factor*std
 
@@ -833,8 +835,10 @@ def remove_xrays_pool(data_array, plot=True, std_factor=STD_FACTOR):
         plt.title("Cleaned Image")
         plt.tight_layout()
         plt.show()
-
-    return np.array(clean_data)
+    if return_pct==True:
+        return np.array(clean_data), np.array(pct_rmv)
+    else:
+        return np.array(clean_data)
 
 
 def subtract_background(data_array, mean_background, plot=True):
@@ -1024,17 +1028,19 @@ def apply_mask(data_array, fill_value=np.nan, add_rectangular=False, plot=False,
 
     ARGUMENTS:
 
-    data_array: 2D array
-        Diffraction pattern.
+    data_array (array):
+        2D or 3D array of an image or images.
 
     OPTIONAL ARUGMENTS:
 
-    fill_value : int, float, or nan, optional
-        Value that use to fill the area of the mask. The default is np.nan.
-    add_rectangular : boolean, optional
-        Additional mask with rectangular shape. The default is True.
-    showingfigure : boolean, optional
-        Show figure of the result of applied masks. The default is False.
+    fill_value (int, float, or nan):
+        Default set to np.nan. Value used to fill the area of the mask.
+    add_rectangular (boolean)
+        The default is True. Adds an additional mask with rectangular shape. 
+    plot (boolean):
+        Default set to False. When true, plots a figure with the original data, the masked data, and a contour map of the data
+    print_vals (boolean):
+        Default set to False. When true, prints the values at each contour line. Useful for setting global variables
 
     GLOBAL VARIABLES:
 
@@ -1137,7 +1143,7 @@ def apply_mask(data_array, fill_value=np.nan, add_rectangular=False, plot=False,
     return masked_data
 
 
-def finding_center_alg(image, thresh_input=THRESHOLD, plot=False, title='Reference Image'):
+def finding_center_alg(image, plot=False, title='Reference Image'):
     """
     Algorithm for finding the center of diffraction pattern
 
@@ -1176,10 +1182,10 @@ def finding_center_alg(image, thresh_input=THRESHOLD, plot=False, title='Referen
 
     """
 
-    if thresh_input == 0:
+    if THRESHOLD == 0:
         thresh = threshold_otsu(image)
     else:
-        thresh = thresh_input
+        thresh = THRESHOLD
 
     cxt, cyt = [], []
     ## apply median filter to help
@@ -1240,7 +1246,7 @@ def finding_center_alg(image, thresh_input=THRESHOLD, plot=False, title='Referen
     return center_x, center_y, radius, thresh
 
 
-def find_center_pool(data_array, plot=True, print_stats=True):
+def find_center_pool(data_array, plot=True, print_stats=False):
     """ Finds center of each image in the data array using concurrent.futures.ThreadPoolExecutor to quickly process
     many data files.
 
@@ -1513,7 +1519,7 @@ def outlier_rev_algo(dat1d, std_factor=STD_FACTOR, fill_value = 'nan'):
     return dat1d
 
 
-def remove_radial_outliers_pool(data_array, centers, plot=False):
+def remove_radial_outliers_pool(data_array, centers, plot=False, return_pct=False):
     """
     Removes instances of outlier pixels based on the radial average of the image. Runs the hidden function _remove_radial_outliers in parallel. 
     Works by first converting an individual array to polar coordinates and remaps to create an average image. Then performs a logical check on 
@@ -1530,6 +1536,8 @@ def remove_radial_outliers_pool(data_array, centers, plot=False):
 
     plot (boolean):
         default set to False. When true, plots an example of original data, the interpolated average image, and the cleaned image
+    return_pct (boolean):
+        Default set to False. When true, returns the percentage of pixels removed per image. 
 
     RETURNS:
 
@@ -1589,8 +1597,10 @@ def remove_radial_outliers_pool(data_array, centers, plot=False):
         plt.title("Percent of nan Values per Image")
         plt.tight_layout()
         plt.show()
-
-    return clean_data
+    if return_pct == True:
+        return clean_data, rmv_count
+    else:
+        return clean_data
 
 
 def azimuthal_integration_alg(center, image, max_azi=450):
@@ -2029,7 +2039,16 @@ def read_combined_data(file_name, group_name, variable_names, run_numbers = 'all
     return concatenated_data
     
 
+def _print_h5_structure(group_name, run_number):
+    if isinstance(run_number, h5py.Group):
+        print(f"Group: {group_name}")
+    elif isinstance(run_number, h5py.Dataset):
+        print(f"Dataset: {group_name}")
 
+def inspect_h5(file_name):
+    """ Inspects and prints structure of the h5 file of interest"""
+    with h5py.File(file_name, 'r') as f:
+        f.visititems(_print_h5_structure)
 
         
 
