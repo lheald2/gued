@@ -1339,76 +1339,6 @@ def find_center_pool(data_array, plot=True, print_stats=False):
     return center_x, center_y
 
 
-def find_beam_center(I, center=[500, 500], r=200, printr2='no', recursiontime=0):
-    recursiontime += 1
-    # up down right left,r away pixles average
-    # fit_value=average([I[center[0]+r][center[1]],I[center[0]-r][center[1]],I[center[0]][center[1]+r],I[center[0]][center[1]-r]])
-    fit_value = np.average([I[round(center[0]) + r][round(center[1])], I[round(center[0]) - r][round(center[1])],
-                            I[round(center[0])][round(center[1]) + r], I[round(center[0])][round(center[1]) - r]])
-
-    [X_f, Y_f] = np.where((I > 0.999 * fit_value) & (I < 1.001 * fit_value))
-
-    a = len(X_f)
-    i = 0
-    # delete fit_points which are too far away from fit_circle, range from 0.5r to 1.5r
-    while (i < a):
-        ri2 = (X_f[i] - center[0]) ** 2 + (Y_f[i] - center[1]) ** 2
-        if (ri2 > (1.5 * r) ** 2) or (ri2 < (0.5 * r) ** 2):
-            X_f = np.delete(X_f, i)
-            Y_f = np.delete(Y_f, i)
-            i -= 1
-            a -= 1
-        i += 1
-
-    center_new, r_new = fit_circle([X_f, Y_f], printr2)
-
-    if r_new == 0:
-        return [0, 0]
-    elif ((center[0] - center_new[0]) ** 2 + (center[1] - center_new[1]) ** 2) <= 1:
-        # new center pretty close to old center
-        return center_new
-    elif recursiontime >= 10:
-        return [0, 0]
-    else:
-        # else: iterate
-        return find_beam_center(I, center_new, r_new, recursiontime=recursiontime)
-
-
-def fit_circle(fit_points, printr2='yes'):
-    # circle function: ax+by+c=-(x^2+y^2)
-
-    A = np.empty((len(fit_points[0]), 3))  # Find center for 3 thimes
-    B = np.empty(len(fit_points[0]))
-
-    for i in range(len(fit_points[0])):
-        B[i] = -(fit_points[0][i] ** 2 + fit_points[1][i] ** 2)
-        A[i][0] = fit_points[0][i]
-        A[i][1] = fit_points[1][i]
-        A[i][2] = 1
-
-    # A[i]=[xi,yi,1], B[i]=-(xi^2+yi^2), par=[a,b,c]
-    # namely A*par=B, least square method
-    if np.linalg.det(np.dot(A.T, A)) == 0:
-        return [], 0
-    par = np.dot(np.dot(np.linalg.inv(np.dot(A.T, A)), A.T), B)
-
-    # correlation coeff, if not very close to 1(less than 3 nines), be careful
-    if printr2 == 'yes':
-        y_ave = np.mean(B)
-        r2 = sum((np.dot(A, par) - y_ave) ** 2) / sum((B - y_ave) ** 2)
-        print(r2)
-
-    center_new = [(-par[0] / 2), (-par[1] / 2)]  # no-Round the center, not working for the moment
-    r_new = round(
-        np.sqrt(par[0] ** 2 + par[1] ** 2 - 4 * par[2]) / 2)  # no-round the r range, not working for the moment
-    # print('ct found:'+str(center_new))
-
-    # center_new=[round(-par[0]/2),round(-par[1]/2)] # Round the center
-    # r_new=round(sqrt(par[0]**2+par[1]**2-4*par[2])/2) # round the r range
-
-    return center_new, r_new
-
-
 def _median_filter(image, kernel_size = 5):
     """
     Applies the scipy.ndimage.median_filter function to the image then returns the filtered image"""
@@ -1959,6 +1889,51 @@ def add_to_h5(file_name, group_name, var_name, var_data):
         group.create_dataset(var_name, data=var_data)
         print(f"Variable '{var_name}' added to group '{group_name}' successfully.")
 
+
+def add_to_h5(file_name, group_name, var_data_dict, run_number):
+    """
+    Appends multiple datasets to a specified group in an h5 file with a specific run number.
+    
+    ARGUMENTS:
+    
+    file_name (str):
+        Name and path to h5 file you wish to append data to.
+    group_name (str):
+        Subgroup within the h5 dataset that you wish to append data to.
+    var_data_dict (dict):
+        Dictionary where keys are variable names and values are arrays of data to add to the h5 file.
+    run_number (int):
+        Run number to specify which run the data belongs to.
+    """
+
+    # Open the HDF5 file in append mode
+    with h5py.File(file_name, 'a') as f:
+        # Check if the group exists, create if not
+        if group_name in f:
+            group = f[group_name]
+        else:
+            group = f.create_group(group_name)
+
+        if run_number == None:
+            for var_name, var_data in var_data_dict.items():
+                group.create_dataset(var_name, data=var_data)
+                print(f"Varriable '{var_name}' added to group '{group_name}' successfully.")
+            return
+        else:
+            for var_name, var_data in var_data_dict.items():
+                # Create the run-specific variable name
+                run_var_name = f"{var_name}_run_{run_number}"
+                
+                # Delete the existing dataset if it exists
+                if run_var_name in group:
+                    print(f"Warning: Dataset '{run_var_name}' already exists in group '{group_name}'. It will be overwritten.")
+                    del group[run_var_name]
+                
+                # Create the dataset within the group
+                group.create_dataset(run_var_name, data=var_data)
+                print(f"Variable '{run_var_name}' added to group '{group_name}' successfully.")
+            return
+        
 
 def read_combined_data(file_name, group_name, variable_names, run_numbers = 'all'):
     """Reads in and concatenates all the data within a group from an h5 file.
