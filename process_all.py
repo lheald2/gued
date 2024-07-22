@@ -10,8 +10,8 @@ from scipy.signal import savgol_filter
 import gued
 
 if __name__ == "__main__":
-    data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\Run\\*\\'
-    #data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180623\\Run\\'
+    #data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\Run\\*\\'
+    data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180623\\Run_01\\'
     run_path = "*\\*\\ANDOR1_*.tif"
     
     #bkg_path = '/work/centurion/shared/UED_data/FY18_o-nitrophenol/20180823/Background/*/*/ANDOR1_*.tif'
@@ -23,8 +23,8 @@ if __name__ == "__main__":
     #bkg_files = glob.glob(bkg_path)
     print(f"{len(files)} found in {full_path} folders")
 
-    print('Loading diffraction signal');
-    all_data, all_stages, all_orders, all_counts = gued.get_image_details(files, sort=True, filter_data=False, plot=False)
+    print('Loading diffraction signal')
+    all_data, all_stages, all_orders, all_counts = gued.get_image_details(files, sort=True, filter_data=[2000,4000], plot=False)
 
     exp_label = "o-ntph_data"
     today = date.today()
@@ -33,8 +33,9 @@ if __name__ == "__main__":
     file_path = "C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\"
     file_name = file_path + f"{exp_label}_{today}.h5"
     print(f"writing data to {file_name}")
-    group_name = "s1"
-    #group_name = "s4"
+    #group_name = "s1"
+    group_name = "s4"
+    save_factor = 10
 
     group_size = 200
     groups = np.arange(0, len(all_data)+1, group_size)
@@ -53,17 +54,17 @@ if __name__ == "__main__":
         counts_std  = np.std(counts)         # the STD of all the tc for all the iamges
         uni_stage = np.unique(stage_positions)# Pump-probe stage position
 
-        print(f"Filtering based on counts for files {groups[i]} to {groups[i+1]}")
+        #print(f"Filtering based on counts for files {groups[i]} to {groups[i+1]}")
         data_array, stage_positions, file_order, counts = gued.remove_counts(data_array, stage_positions, file_numbers, 
                                                                              counts, added_range=[], plot=False)
 
-        print(f"Removing background for files {groups[i]} to {groups[i+1]}")
+        #print(f"Removing background for files {groups[i]} to {groups[i+1]}")
         data_array = gued.remove_background_pool(data_array, remove_noise=True, plot=False)
 
-        print(f"Removing xrays for files {groups[i]} to {groups[i+1]}")
+        #print(f"Removing xrays for files {groups[i]} to {groups[i+1]}")
         data_array, pct_xrays = gued.remove_xrays_pool(data_array, plot=False, return_pct=True)
 
-        print(f"Masking Data with 0.0 value for files {groups[i]} to {groups[i+1]}")
+        #print(f"Masking Data with 0.0 value for files {groups[i]} to {groups[i+1]}")
         data_array = gued.apply_mask(data_array, fill_value=0.0, plot=False)
 
         print(f"Finding center for files {groups[i]} to {groups[i+1]}")
@@ -73,10 +74,10 @@ if __name__ == "__main__":
         #average_center = [455, 460]
         print(f"Average center of data set {i} is ({average_center[0]:.2f}, {average_center[1]:.2f})")
 
-        print(f"Remasking Data with np.nan value for files {groups[i]} to {groups[i+1]}")
+        #print(f"Remasking Data with np.nan value for files {groups[i]} to {groups[i+1]}")
         data_array = gued.apply_mask(data_array, fill_value=np.nan, plot=False)
 
-        print(f"Median Filtering for files {groups[i]} to {groups[i+1]}")
+        #print(f"Median Filtering for files {groups[i]} to {groups[i+1]}")
         clean_data = gued.median_filter_pool(data_array, plot=False)
 
         data_array = clean_data
@@ -93,16 +94,18 @@ if __name__ == "__main__":
             'percent_xrays': pct_xrays}
         
         data_note = "Testing new processing with smoothed centers"
-        gued.save_data(file_name, group_name, i, data_dictionary, group_note=data_note)
+        gued.save_data(file_name, group_name, (i+save_factor), data_dictionary, group_note=data_note)
         del data_array, stage_positions, file_numbers, counts, counts_mean, counts_std
 
     stop = time.perf_counter()
 
     print(f"Finished pre-processing {int(groups[-1])-(groups[0])} in {(stop-start)/60} minutes")
+    del all_counts, all_data, all_orders, all_stages
 
     variable_names = ["centers", "clean_images"]
+    run_numbers = list(np.arange(save_factor,(save_factor+len(groups)),1))
     
-    combined_data = gued.read_combined_data(file_name, group_name, variable_names, run_numbers='all')
+    combined_data = gued.read_combined_data(file_name, group_name, variable_names, run_numbers=run_numbers)
     centers_x = combined_data['centers'][:,0]
     centers_y = combined_data['centers'][:,1]
 
@@ -131,7 +134,7 @@ if __name__ == "__main__":
                            "new_centers": centers,
                            "I": norm_data}
         
-        gued.add_to_h5(file_name, group_name, data_dictionary, i)
+        gued.add_to_h5(file_name, group_name, data_dictionary, run_number=(i+save_factor))
         del norm_data, norm_std, data_array, centers, pct_outliers
         print(f"Done post processing files {groups[i]} to {groups[i+1]}")
     

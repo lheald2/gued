@@ -155,7 +155,6 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
         One dimensional numpy array of length N containing the data after summing over each array element.
 
     """
-    data_array = tf.imread(file_names)  # construct array containing files
     if type(SEPARATORS) == list:
         try:
             stage_pos = []
@@ -201,26 +200,34 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
 
     stage_pos = np.array(stage_pos)
     file_order = np.array(file_order)
-    counts = _get_counts(data_array)
+    file_names = np.array(file_names)
+
 
     if sort == True:
         idx_sort = np.argsort(file_order)
         file_order = file_order[idx_sort]
-        data_array = data_array[idx_sort]
+        file_names = list(file_names[idx_sort])
         stage_pos = stage_pos[idx_sort]
-        counts = counts[idx_sort]
+
 
     if type(filter_data) == list:
+        print("Filtering files")
         min_val = filter_data[0]
         max_val = filter_data[1]
-        try:
+        if max_val < len(file_names):
             good_range = np.arange(min_val, max_val, 1)
-            data_array = data_array[good_range]
-            stage_pos = stage_pos[good_range]
-            counts = counts[good_range]
-            file_order = file_order[good_range]
-        except:
+            data_array = tf.imread(file_names[min_val:max_val])  # construct array containing files
+            counts = _get_counts(data_array)
+            stage_pos = stage_pos[min_val:max_val]
+            file_order = file_order[min_val:max_val]
+        else:
             print("Max value is larger than the size of the data range, returning all data")
+   
+    elif filter_data == False:
+        data_array = tf.imread(file_names)  # construct array containing files
+        counts = _get_counts(data_array)
+
+
 
     if plot == True:
         test = data_array[0]
@@ -1506,7 +1513,7 @@ def remove_radial_outliers_pool(data_array, centers, plot=False, return_pct=Fals
             rmv_count.append(np.sum(rmv)/(len(data_array[0][0])*len(data_array[0][1])))
 
     clean_data = np.array(clean_data)
-    rmv_count = np.array(rmv_count)
+    rmv_count = np.array(rmv_count)*100
 
     if plot == True:
         plt.figure(figsize=FIGSIZE)
@@ -1849,48 +1856,13 @@ def save_data(file_name, group_name, run_number, data_dict, group_note=None):
             if run_dataset_name in group:
                 del group[run_dataset_name]
             group.create_dataset(run_dataset_name, data=data)
-                
-    print(f"Data for run {run_number} saved to group '{group_name}' in {file_name} successfully.")
 
+        f.close()         
+    print(f"Data for run {run_number} saved to group '{group_name}' in {file_name} successfully.")
     return
 
 
-def add_to_h5(file_name, group_name, var_name, var_data):
-    """
-    Appends a data set to a specified group in an h5 file. 
-    
-    ARGUMENTS:
-    
-    file_name (str):
-        name and path to h5 file you wish to append data to
-    group_name (str):
-        subgroup within the h5 data set that you wish to append data to
-    var_name (str):
-        name of data that you are appending i.e., "pdf" 
-    var_data (array):
-        array of data to add to the h5 file. 
-    """
-
-    # Open the HDF5 file in append mode
-    with h5py.File(file_name, 'a') as f:
-        # Check if the group exists
-        if group_name in f:
-            group = f[group_name]
-        else:
-            print(f"Error: Group '{group_name}' not found.")
-            return
-        
-        # Delete the existing dataset if it exists
-        if var_name in group:
-            print(f"Warning: Dataset '{var_name}' already exists in group '{group_name}'. It will be overwritten.")
-            del group[var_name]
-        
-        # Create the dataset within the group
-        group.create_dataset(var_name, data=var_data)
-        print(f"Variable '{var_name}' added to group '{group_name}' successfully.")
-
-
-def add_to_h5(file_name, group_name, var_data_dict, run_number):
+def add_to_h5(file_name, group_name, var_data_dict, run_number=None):
     """
     Appends multiple datasets to a specified group in an h5 file with a specific run number.
     
@@ -1918,6 +1890,7 @@ def add_to_h5(file_name, group_name, var_data_dict, run_number):
             for var_name, var_data in var_data_dict.items():
                 group.create_dataset(var_name, data=var_data)
                 print(f"Varriable '{var_name}' added to group '{group_name}' successfully.")
+            f.close()
             return
         else:
             for var_name, var_data in var_data_dict.items():
@@ -1932,6 +1905,7 @@ def add_to_h5(file_name, group_name, var_data_dict, run_number):
                 # Create the dataset within the group
                 group.create_dataset(run_var_name, data=var_data)
                 print(f"Variable '{run_var_name}' added to group '{group_name}' successfully.")
+            f.close()
             return
         
 
@@ -1983,7 +1957,8 @@ def read_combined_data(file_name, group_name, variable_names, run_numbers = 'all
                     concatenated_data[name] = np.concatenate(data_accumulators[name], axis=0)
                 else:
                     concatenated_data[name] = None
-    
+            f.close()
+
     elif type(run_numbers) == list:
         concatenated_data = {name: None for name in variable_names}
 
@@ -2010,7 +1985,7 @@ def read_combined_data(file_name, group_name, variable_names, run_numbers = 'all
                     concatenated_data[name] = np.concatenate(data_accumulators[name], axis=0)
                 else:
                     concatenated_data[name] = None
-        
+            f.close()
     return concatenated_data
     
 
@@ -2020,10 +1995,12 @@ def _print_h5_structure(group_name, run_number):
     elif isinstance(run_number, h5py.Dataset):
         print(f"Dataset: {group_name}")
 
+
 def inspect_h5(file_name):
     """ Inspects and prints structure of the h5 file of interest"""
     with h5py.File(file_name, 'r') as f:
         f.visititems(_print_h5_structure)
+        f.close()
 
         
 

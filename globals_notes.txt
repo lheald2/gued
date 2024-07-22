@@ -7,7 +7,7 @@ SEPARATORS = ['-', '_']
 CENTER_GUESS = (460, 460)
 RADIUS_GUESS = 35
 DISK_RADIUS = 3
-THRESHOLD = 0
+THRESHOLD = 150
 
 # Variable for Generating Background
 CORNER_RADIUS = 20

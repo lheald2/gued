@@ -1,22 +1,22 @@
-### Global Variables for s1 data set
+### Global Variables for s4 Data Set
 
 # Variable for reading files
 SEPARATORS = ['-', '_']
 
 # Variables for Center Finding Algorithm
-CENTER_GUESS = (460, 460)
-RADIUS_GUESS = 35
+CENTER_GUESS = (500, 500)
+RADIUS_GUESS = 50
 DISK_RADIUS = 3
-THRESHOLD = 150
+THRESHOLD = 120
 
-# Variable for Generating Background
+# Variables for Generating Background
 CORNER_RADIUS = 20
 CHECK_NUMBER = 50
 
 # Variables for Masking
-MASK_CENTER = [475, 475]
-MASK_RADIUS = 40
-ADDED_MASK = [[440, 435, 30], [460, 450, 30]]
+MASK_CENTER = [500, 590]
+MASK_RADIUS = 45
+ADDED_MASK = [[525, 550, 30]]
 
 # Used throughout code as the threshold for cutting out date. This is the default value but other values can be set for the functions using
 # std_factor = 4
@@ -29,6 +29,6 @@ MAX_PROCESSORS = 6
 FIGSIZE = (12,4)
 
 # Path for Theory Package
-
 PATH_DCS = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\Coding Lab Notebook\\gued_package\\GUED_Analysis\\packages\\dcs_repositiory\\3.7MeV\\'
 #path_dcs = '/sdf/home/l/lheald2/GUED/jupyter_notebook/user_notebooks/dcs_repository/3.7MeV/
+
