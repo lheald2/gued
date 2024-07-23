@@ -199,6 +199,7 @@ def load_molecular_structure(path_mol, mol_name, file_type = [], mol2_str = None
 
 
 def mol2_to_xyz(mol2_str):
+    """Function for converting a mol2 string taken from an online source such as pubchem or chemspider and converts to xyz coordinates."""
     atoms_section = False
     coor = []
 
@@ -1337,17 +1338,8 @@ def get_exp_sM_PDF(coor, atom_sum, s_exp, dI, freq_filter=False, polyfit=False, 
         I_at_all.append(I_atomic)
     I_at = sum(np.array(I_at_all))
     
-    sM_new = []   
-    # add numbers for nan values           
-    for i in range(len(dI)):
-        nan_num = sum(np.isnan(dI[i]))
-        sM_temp = s_exp*(dI[i])/I_at
-        temp_mean = np.nanmean(sM_temp[nan_num:nan_num+5])
-        slope = temp_mean/nan_num
-        sM_temp[0:nan_num] = np.arange(0,nan_num)*slope
-        sM_new.append(sM_temp)
-    sM = np.array(sM_new)/np.nanmax(np.array(sM_new))  # Normalized?
-    
+    sM = s_exp*(dI/I_at)
+
     if freq_filter == True:
         sM = bandpass_filter(sM, ds)
     if polyfit == True:
@@ -1356,11 +1348,22 @@ def get_exp_sM_PDF(coor, atom_sum, s_exp, dI, freq_filter=False, polyfit=False, 
         sM = gaussian_filter(sM, sigma=sigma)
     if powerfit == True:
         sM = power_fit(sM, s_exp, plot=True)
+    
+    sM_new = []   
+    # add numbers for nan values           
+    for i in range(len(dI)):
+        nan_num = sum(np.isnan(dI[i]))+5 # added 5 to pass over low s noise
+        sM_temp = sM[i]
+        temp_mean = np.nanmean(sM_temp[nan_num:nan_num+5])
+        slope = temp_mean/nan_num
+        sM_temp[0:nan_num] = np.arange(0,nan_num)*slope
+        sM_new.append(sM_temp)
+    sM = np.array(sM_new)/np.nanmax(np.array(sM_new))  # Normalized?
 
     print(f"s calibration value is {ds}")
     rmax=10; # in angstroms
-    r=np.linspace(0,rmax,np.round(1000))
-    damp_const = np.log(0.05)/(-1 * (np.max(s_exp)**2))
+    r=np.linspace(0,rmax,np.round(500))
+    damp_const = np.log(0.01)/(-1 * (np.max(s_exp)**2))
     print(f"1/alpha value for damping constant is {1/damp_const}")
 
     pdf_exp = []

@@ -10,8 +10,8 @@ from scipy.signal import savgol_filter
 import gued
 
 if __name__ == "__main__":
-    #data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\Run\\*\\'
-    data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180623\\Run_01\\'
+    data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\Run\\*\\'
+    #data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180623\\Run_01\\'
     run_path = "*\\*\\ANDOR1_*.tif"
     
     #bkg_path = '/work/centurion/shared/UED_data/FY18_o-nitrophenol/20180823/Background/*/*/ANDOR1_*.tif'
@@ -24,7 +24,7 @@ if __name__ == "__main__":
     print(f"{len(files)} found in {full_path} folders")
 
     print('Loading diffraction signal')
-    all_data, all_stages, all_orders, all_counts = gued.get_image_details(files, sort=True, filter_data=[2000,4000], plot=False)
+    all_data, all_stages, all_orders, all_counts = gued.get_image_details(files, sort=True, filter_data=False, plot=False)
 
     exp_label = "o-ntph_data"
     today = date.today()
@@ -33,9 +33,9 @@ if __name__ == "__main__":
     file_path = "C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\"
     file_name = file_path + f"{exp_label}_{today}.h5"
     print(f"writing data to {file_name}")
-    #group_name = "s1"
-    group_name = "s4"
-    save_factor = 10
+    group_name = "s1"
+    #group_name = "s4"
+    save_factor = 0
 
     group_size = 200
     groups = np.arange(0, len(all_data)+1, group_size)
@@ -113,9 +113,20 @@ if __name__ == "__main__":
     # Apply Savitzky-Golay filter
     window_size = 101  # Choose an odd number for the window size
     poly_order = 1  # Choose the polynomial order
-    smoothed_x = savgol_filter(centers_x, window_size, poly_order)
-    smoothed_y = savgol_filter(centers_y, window_size, poly_order)
-    smoothed_centers = list(zip(smoothed_x, smoothed_y))
+
+    if group_name == "s1":
+        smoothed_x = np.concatenate((savgol_filter(centers_x[:1440], window_size, poly_order),
+                                    savgol_filter(centers_x[1441:1505], 35, poly_order), 
+                                    savgol_filter(centers_x[1505:], window_size, poly_order)))
+
+        smoothed_y = np.concatenate((savgol_filter(centers_y[:990], window_size, poly_order),
+                                    savgol_filter(centers_y[991:1627], window_size, poly_order), 
+                                    savgol_filter(centers_y[1627:], window_size, poly_order)))
+        smoothed_centers = list(zip(smoothed_x, smoothed_y))
+    else:
+        smoothed_x = savgol_filter(centers_x, window_size, poly_order)
+        smoothed_y = savgol_filter(centers_y, window_size, poly_order)
+        smoothed_centers = list(zip(smoothed_x, smoothed_y))
 
     for i in range(len(groups)-1):
         data_array = combined_data["clean_images"][groups[i]:groups[i+1]]
@@ -130,7 +141,8 @@ if __name__ == "__main__":
         print(f"Calculating the Azimuthal average and Normalizing for files {groups[i]} to {groups[i+1]}")
         norm_data, norm_std = gued.get_azimuthal_average_pool(data_array, centers, normalize=True, plot=False)
 
-        data_dictionary = {"percent_outliers": pct_outliers, 
+        data_dictionary = {"clean_images": data_array,
+                           "percent_outliers": pct_outliers, 
                            "new_centers": centers,
                            "I": norm_data}
         

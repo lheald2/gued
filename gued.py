@@ -17,7 +17,7 @@ from tifffile import tifffile as tf
 import matplotlib.pyplot as plt
 import matplotlib
 import pandas as pd
-import scipy.signal as ss
+from scipy import signal
 import concurrent.futures
 from functools import partial
 import h5py
@@ -157,7 +157,7 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
     """
     if type(SEPARATORS) == list:
         try:
-            stage_pos = []
+            stage_positions = []
             file_order = []
             try:
                 # stage_pos = [np.float64(file_name[idx_start:idx_end]) for file_name in file_names]
@@ -170,7 +170,7 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
                     file_number = int(folder_number + string[1])
                     file_order.append(int(file_number))
                     string = list(map(str, string[-1].split(SEPARATORS[1])))
-                    stage_pos.append(float(string[0]))
+                    stage_positions.append(float(string[0]))
             except ValueError:
                 raise ValueError("""Failed to convert a file name to a float. Make sure that index positions are correct for all files in file_names. 
                 Also check separators""")
@@ -179,7 +179,7 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
                 "Invalid index values. Make sure the index values are within the range of the file name strings.")
     elif type(SEPARATORS) == str:
         try:
-            stage_pos = []
+            stage_positions = []
             file_order = []
             try:
                 # stage_pos = [np.float64(file_name[idx_start:idx_end]) for file_name in file_names]
@@ -188,7 +188,7 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
                     string = list(map(str, file.split("\\")))
                     string = list(map(str, string[-1].split(SEPARATORS)))
                     file_order.append(int(string[2]))
-                    stage_pos.append(float(string[3]))
+                    stage_positions.append(float(string[3]))
             except ValueError:
                 raise ValueError(
                     """Failed to convert a file name to a float. Make sure that index positions are correct for all files in file_names. Also check separators""")
@@ -198,7 +198,7 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
     else:
         print("Provide valid SEPARATORS")
 
-    stage_pos = np.array(stage_pos)
+    stage_positions = np.array(stage_positions)
     file_order = np.array(file_order)
     file_names = np.array(file_names)
 
@@ -207,7 +207,7 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
         idx_sort = np.argsort(file_order)
         file_order = file_order[idx_sort]
         file_names = list(file_names[idx_sort])
-        stage_pos = stage_pos[idx_sort]
+        stage_positions = stage_positions[idx_sort]
 
 
     if type(filter_data) == list:
@@ -215,10 +215,9 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
         min_val = filter_data[0]
         max_val = filter_data[1]
         if max_val < len(file_names):
-            good_range = np.arange(min_val, max_val, 1)
             data_array = tf.imread(file_names[min_val:max_val])  # construct array containing files
             counts = _get_counts(data_array)
-            stage_pos = stage_pos[min_val:max_val]
+            stage_positions = stage_positions[min_val:max_val]
             file_order = file_order[min_val:max_val]
         else:
             print("Max value is larger than the size of the data range, returning all data")
@@ -253,12 +252,12 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
         plt.tight_layout()
         plt.show()
 
-        _show_counts(stage_pos, counts)
+        _show_counts(stage_positions, counts)
 
-    return data_array, stage_pos, file_order, counts
+    return data_array, stage_positions, file_order, counts
 
 
-def get_image_details_keV(file_names, sort=False, multistage=False):
+def get_image_details_keV(file_names, sort=False, multistage=False, filter_data=False, plot=False):
     # todo update to look like other get_image_details code and make for one stage
     """
     Reads all images from input file_names and returns the data as a 3d array along with stage positions, order, and counts per image.
@@ -272,6 +271,8 @@ def get_image_details_keV(file_names, sort=False, multistage=False):
 
     sort (boolean): 
         default is set to True. This arguments sorts the data based on when it was saved (i.e. file number)
+    multistage (boolean):
+        default is set to False. Use this when file names contain information from multiple stages.
     plot (boolean): 
         default is set to False. When True, a plot of the data, log(data), and histogram of counts is shown
     filter_data (boolean): 
@@ -300,7 +301,7 @@ def get_image_details_keV(file_names, sort=False, multistage=False):
             current = []
             try:
                 for file in file_names:
-                    string = list(map(str, file.split("/")))
+                    string = list(map(str, file.split("\\")))
                     string = list(map(str, string[-1].split("_")))
                     file_number = int(string[1])
                     file_order.append(file_number)
@@ -318,17 +319,67 @@ def get_image_details_keV(file_names, sort=False, multistage=False):
         uv_stage_pos = np.array(uv_stage_pos)
         file_order = np.array(file_order)
         current = np.array(current)
-        counts = _get_counts(data_array)
+
+        uni_stage_ir = np.unique(ir_stage_pos)# Pump-probe stage position
+        uni_stage_uv = np.unique(uv_stage_pos)
+
+        if len(uni_stage_ir) > 1: 
+            stage_positions = ir_stage_pos
+        elif len(uni_stage_uv) > 1: 
+            stage_positions = uv_stage_pos
+        else:
+            print("Bad Stage Positions")
 
         if sort == True:
             temp_idx = _sort_files_multistage(file_order, ir_stage_pos, uv_stage_pos)
             data_array = data_array[temp_idx]
-            ir_stage_pos = ir_stage_pos[temp_idx]
-            uv_stage_pos = uv_stage_pos[temp_idx]
+            stage_positions = stage_positions[temp_idx]
             file_order = file_order[temp_idx]
             current = current[temp_idx]
-            counts = counts[temp_idx]
-        return data_array, ir_stage_pos, uv_stage_pos, file_order, counts, current
+
+        if type(filter_data) == list:
+            print("Filtering files")
+            min_val = filter_data[0]
+            max_val = filter_data[1]
+            if max_val < len(file_names):
+                data_array = tf.imread(file_names[min_val:max_val])  # construct array containing files
+                counts = _get_counts(data_array)
+                stage_positions = stage_positions[min_val:max_val]
+                file_order = file_order[min_val:max_val]
+            else:
+                print("Max value is larger than the size of the data range, returning all data")
+   
+        elif filter_data == False:
+            data_array = tf.imread(file_names)  # construct array containing files
+            counts = _get_counts(data_array)
+
+        if plot == True:
+            test = data_array[0]
+            plt.figure(figsize=FIGSIZE)
+            plt.subplot(1, 3, 1)
+            plt.imshow(test, cmap='jet')
+            plt.xlabel('Pixel')
+            plt.ylabel('Pixel')
+            plt.title('Linear Scale(data)')
+
+            plt.subplot(1, 3, 2)
+            plt.imshow(np.log(test), cmap='jet')
+            plt.xlabel('Pixel')
+            plt.ylabel('Pixel')
+            plt.title('Log Scale(data)')
+
+            plt.subplot(1, 3, 3)
+            plt.hist(test.reshape(-1), bins=30, edgecolor="r", histtype="bar", alpha=0.5)
+            plt.xlabel('Pixel Intensity')
+            plt.ylabel('Pixel Number')
+            plt.title('Hist of the pixel intensity(data)')
+            plt.yscale('log')
+            plt.tight_layout()
+            plt.show()
+
+            _show_counts(stage_positions, counts)
+
+        return data_array, stage_positions, file_order, counts, current
 
     if multistage == False:
         try:
@@ -353,7 +404,6 @@ def get_image_details_keV(file_names, sort=False, multistage=False):
         stage_positions = np.array(stage_positions)
         file_order = np.array(file_order)
         current = np.array(current)
-        counts = _get_counts(data_array)
 
         if sort == True:
             temp_idx = _sort_files(file_order, stage_positions)
@@ -361,7 +411,48 @@ def get_image_details_keV(file_names, sort=False, multistage=False):
             stage_positions = stage_positions[temp_idx]
             file_order = file_order[temp_idx]
             current = current[temp_idx]
-            counts = counts[temp_idx]
+
+        if type(filter_data) == list:
+            print("Filtering files")
+            min_val = filter_data[0]
+            max_val = filter_data[1]
+            if max_val < len(file_names):
+                data_array = tf.imread(file_names[min_val:max_val])  # construct array containing files
+                counts = _get_counts(data_array)
+                stage_pos = stage_pos[min_val:max_val]
+                file_order = file_order[min_val:max_val]
+            else:
+                print("Max value is larger than the size of the data range, returning all data")
+   
+        elif filter_data == False:
+            data_array = tf.imread(file_names)  # construct array containing files
+            counts = _get_counts(data_array)
+
+        if plot == True:
+            test = data_array[0]
+            plt.figure(figsize=FIGSIZE)
+            plt.subplot(1, 3, 1)
+            plt.imshow(test, cmap='jet')
+            plt.xlabel('Pixel')
+            plt.ylabel('Pixel')
+            plt.title('Linear Scale(data)')
+
+            plt.subplot(1, 3, 2)
+            plt.imshow(np.log(test), cmap='jet')
+            plt.xlabel('Pixel')
+            plt.ylabel('Pixel')
+            plt.title('Log Scale(data)')
+
+            plt.subplot(1, 3, 3)
+            plt.hist(test.reshape(-1), bins=30, edgecolor="r", histtype="bar", alpha=0.5)
+            plt.xlabel('Pixel Intensity')
+            plt.ylabel('Pixel Number')
+            plt.title('Hist of the pixel intensity(data)')
+            plt.yscale('log')
+            plt.tight_layout()
+            plt.show()
+
+            _show_counts(stage_pos, counts)
 
     return data_array, stage_positions, file_order, counts, current
 
@@ -957,7 +1048,7 @@ def mask_generator_alg(image, fill_value=np.nan, add_rectangular=False, plot=Fal
     fill_value : int, float, or nan, optional
         Value that use to fill the area of the mask. The default is np.nan.
     add_rectangular : boolean, optional
-        Additional mask with rectangular shape. The default is True.
+        Additional mask with rectangular shape. The default is True. Uses global variables to define the shape of the rectangle
     showingfigure : boolean, optional
         Show figure of the result of applied masks. The default is False.
 
@@ -969,6 +1060,10 @@ def mask_generator_alg(image, fill_value=np.nan, add_rectangular=False, plot=Fal
         Radius of the mask.
     ADDDED_MASK (list of 3-value-lists):
         Additional masks. Input gonna be [[x-center, y-center, radius], [...], ...] The default is [].
+    REC_LENGTH (int):
+        length of the rectangle in the vertical direction
+    REC_EXTENT (tuple of ints):
+        defines the length and width of the rectangle
 
 
     RETURNS:
@@ -991,7 +1086,7 @@ def mask_generator_alg(image, fill_value=np.nan, add_rectangular=False, plot=Fal
 
     # retangular mask
     if add_rectangular == True:
-        rr, cc = draw.rectangle((0, 590), extent=(500, 40), shape=image.shape)  # (0,535) for iodobenzene
+        rr, cc = draw.rectangle((0, REC_LENGTH), extent=REC_EXTENT, shape=image.shape)  # (0,535) for iodobenzene
         mask[rr, cc] = fill_value
         # 515
 
@@ -1196,7 +1291,7 @@ def finding_center_alg(image, plot=False, title='Reference Image'):
 
     cxt, cyt = [], []
     ## apply median filter to help
-    image = ss.medfilt2d(image, kernel_size=9)
+    image = signal.medfilt2d(image, kernel_size=9)
     for th in [1]:
         thresh *= th
         mask_temp = mask_generator_alg(image, fill_value=False,
@@ -1237,8 +1332,8 @@ def finding_center_alg(image, plot=False, title='Reference Image'):
         for ax in (ax1, ax2, ax3):
             ax.get_xaxis().set_visible(False)
             ax.get_yaxis().set_visible(False)
-        ax1.set_title(title, fontsize=20)
-        ax2.set_title("Center [X = " + str(center_x) + ", Y = " + str(center_y) + "]", fontsize=20)
+        ax1.set_title(title, fontsize=10)
+        ax2.set_title("Center [X = " + str(center_x) + ", Y = " + str(center_y) + "]", fontsize=10)
         ax3.set_title("Binary image", fontsize=20)
 
         ax1.axvline(center_x, linestyle='--', lw=1, color='tab:red')
@@ -1787,13 +1882,13 @@ def poly_fit(data_array, x_vals, degree = 2, plot=True, return_baseline=False):
     if plot == True:
         plt.figure()
         plt.subplot(1,2,1)
-        plt.plot(data_array[0])
-        plt.plot(baseline2d[0])
+        plt.plot(data_array[1])
+        plt.plot(baseline2d[1])
         plt.xlabel("pixel")
         plt.title("delta I/I original with fit line")
 
         plt.subplot(1,2,2)
-        plt.plot(corrected_data[0])
+        plt.plot(corrected_data[1])
         plt.xlabel("pixel")
         plt.title("delta I/I corrected")
 
@@ -1806,6 +1901,79 @@ def poly_fit(data_array, x_vals, degree = 2, plot=True, return_baseline=False):
         return corrected_data
 
 
+def bandpass_filter(data_array, ds, min_freq=0.001, max_freq=5, order = 4, plot=False):
+    """
+    Applies a bandpass filter to the input data to get rid of noise based on the minimum and maximum frequency using the scipy.signal.butter
+    function. Min and Max frequencies can be estimated by the inverse of the bond lengths..?
+    
+    ARGUMENTS:
+
+    data_array (array):
+        1D or 2D array of data which will be bandpass filtered
+    ds (float):
+        s calibration value (or another value representing sampling rate)
+
+    OPTIONAL ARGUMENTS:
+
+    min_freq (float > 0):
+        Default set to 0.001. Minimum value in the bandpass filter.
+    max_freq (float > min_freq):
+        Default set to 5. Maximum value for the bandpass filter.
+    order (int):
+        Default set to 4. Order of the butter bandpass filter. Higher-order filters will have a sharper cutoff but may introduce more 
+        ripple or distortion in the passband. Lower-order filters will have a gentler transition and may be more stable.
+    plot (boolean):
+        Default set to False. When true, plots before and after filtering
+
+    RETURNS:
+    
+    filtered_data (array):
+        Array with the same shape as the input data_array with the bandpass filter applied. 
+    """
+    fs = 1 / ds
+    nyquist = 0.5 * fs
+    low = min_freq/nyquist
+    high = max_freq/nyquist
+
+    # Set up filter
+    b, a = signal.butter(order, [low, high], btype='band')
+
+    if len(data_array.shape)==2:
+        filtered_data = []
+        for i in range(len(data_array)):
+            filtered_temp = signal.filtfilt(b, a, data_array[i][25:])
+            filtered_data.append(filtered_temp)
+        filtered_data = np.array(filtered_data)
+        print(filtered_data)
+
+        if plot == True:
+            plt.figure()
+            plt.subplot(2,1,1)
+            plt.plot(data_array[1])
+            plt.title("Original Data")
+
+            plt.subplot(2,1,2)
+            plt.plot(filtered_data[1])
+            plt.title("Bandpass Filtered Data")
+            plt.tight_layout()
+            plt.show()
+            
+    elif len(data_array.shape)==1:
+        filtered_data = signal.filtfilt(b, a, data_array)
+
+        if plot == True:
+            plt.figure()
+            plt.subplot(2,1,1)
+            plt.plot(data_array)
+            plt.title("Original Data")
+
+            plt.subplot(2,1,2)
+            plt.plot(filtered_data)
+            plt.title("Bandpass filtered Data")
+            plt.tight_layout()
+            plt.show()
+
+    return filtered_data
 # Saving and Loading Data
 
 def save_data(file_name, group_name, run_number, data_dict, group_note=None):
