@@ -2,6 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import sys
+import h5py
+import re
+from collections import defaultdict
 sys.path.append('packages')
 import warnings
 from scipy import signal
@@ -539,7 +542,7 @@ def get_sM_and_PDF_from_I(I_at,I_mol,s,r_max,damp_const):
     return sM,PDF,np.array(r)
 
 
-def plot_delay_simulation_with_conv(matrix_before_conv,x_range,col,t_interval,nt,space_for_convol):
+def apply_conv(matrix_before_conv,x_range,col,t_interval,nt,space_for_convol, plot=False):
     """ ADD DOC STRING"""
 
     x0 = np.linspace(-col,col,int(255/t_interval))
@@ -550,19 +553,21 @@ def plot_delay_simulation_with_conv(matrix_before_conv,x_range,col,t_interval,nt
 
     #M1=np.transpose(M1)
     M1 = np.array(M1)
-            
-    norm = TwoSlopeNorm(vmin=M1.min(),vcenter=0,vmax=M1.max())
-    plt.figure(figsize=(15,5))
-    pc=plt.imshow(M1[:, 0:nt+space_for_convol-1],norm=norm,cmap=plt.get_cmap('seismic'),alpha=0.65)
-    plt.colorbar(pc)
-    ax=plt.gca()
-    ax.invert_yaxis()
-    ax.xaxis.set_ticks_position('bottom')
-    plt.xlabel('time/fs')
-    #plt.xticks(np.arange(0,nt+space_for_convol,100),np.arange(-space_for_convol*t_interval,nt*t_interval,100*t_interval))
-    #plt.axhline(y=space_for_convol,linestyle='--')
-    plt.grid()
-    return
+    print(M1.shape)
+    
+    if plot == True:
+        norm = TwoSlopeNorm(vmin=M1.min(),vcenter=0,vmax=M1.max())
+        plt.figure(figsize=(15,5))
+        pc=plt.imshow(M1[:, 0:nt+space_for_convol-1],norm=norm,cmap=plt.get_cmap('seismic'),alpha=0.65)
+        plt.colorbar(pc)
+        ax=plt.gca()
+        ax.invert_yaxis()
+        ax.xaxis.set_ticks_position('bottom')
+        plt.xlabel('time/fs')
+        #plt.xticks(np.arange(0,nt+space_for_convol,100),np.arange(-space_for_convol*t_interval,nt*t_interval,100*t_interval))
+        #plt.axhline(y=space_for_convol,linestyle='--')
+        plt.grid()
+    return M1
 
 
 def plot_I_sM_PDF(I,sM,PDF,s,r,title_I,title_sM,title_PDF):
@@ -721,7 +726,7 @@ def static_sim(path_mol, mol_name, file_type, s_max = 12, r_max = 800, damp_cons
         return
 
 
-def trajectory_sim(path_mol, mol_name, file_type,s_max=12):
+def dI_I_from_trajectory(path_mol, mol_name, file_type, s_max=12, tstep = 0.5, plot=False):
     """ 
     Calculates the scattering and plots results of a trajectory simulation with a series of xyz coordinates and corresponding time steps.
     Uses the functions load_time_evolving_xyz, get_I_from_xyz, get_2d_matrix, and plot_delay_simulation_with_conv. 
@@ -744,14 +749,84 @@ def trajectory_sim(path_mol, mol_name, file_type,s_max=12):
     
     nothing right now lol
     """
+    coor_txyz, atom_sum, time=load_time_evolving_xyz(path_mol,mol_name,file_type) #load xyz data
+    #options: load_time_evolving_xyz, or load_time_evolving_xyz1
+
+    time_steps = len(time)
+    if float(time[1])-float(time[0])!=0:
+        t_interval = float(time[1])-float(time[0])
+        print(t_interval)
+    elif float(time[1])-float(time[0]) == 0:
+        t_interval = tstep
+        print(t_interval)
+
+    I0,I0_at,I0_mol,s_new = get_I_from_xyz(coor_txyz[0],atom_sum, s_max)
+    dI_I_t = []
+    neg_time = 100/t_interval
+
+    for i in range(0, int(neg_time)):
+        dI_I = np.zeros(I0.shape)
+        dI_I_t.append(dI_I)
+    for i in range(time_steps):
+        I,I_at,I_mol,s = get_I_from_xyz(coor_txyz[i],atom_sum, s_max)
+        dI_I_t.append((I-I0)/I)
+
+    dI_I_t=np.array(dI_I_t)
+    t_fs = np.linspace(-100, 1000, len(dI_I_t))
+
+    if plot == True:
+        norm = TwoSlopeNorm(vmin=dI_I_t.min(),vcenter=0,vmax=dI_I_t.max())
+        plt.figure(figsize=FIGSIZE)
+        plt.pcolor(t_fs, s, dI_I_t.T, norm=norm, cmap="bwr")
+        plt.xlabel("time (fs)")
+        plt.ylabel("s (A^-1)")
+        plt.colorbar()
+        plt.show()
+    
+    return dI_I_t, s, t_fs
+
+    
+def trajectory_sim(path_mol, mol_name, file_type, s_max=12, tstep = 0.5, plot=False, return_data=False):
+    """ 
+    Calculates the scattering and plots results of a trajectory simulation with a series of xyz coordinates and corresponding time steps.
+    Uses the functions load_time_evolving_xyz, get_I_from_xyz, get_2d_matrix, and plot_delay_simulation_with_conv. 
+    
+    ARGUMENTS:
+    
+    path_mol (str):
+        path to the folder with the trajectory simulation
+    mol_name (str):
+        name of trajectory file
+    file_type (str):
+        '.xyz' or '.csv' but I think it only works with xyz currently 
+        
+    OPTIONAL ARGUMENTS:
+    
+    s_max (int):
+        Default set to 12 inverse angstroms. Defines the maximum scattering range for consideration
+    plot (boolean):
+        Default set to False. When true, shows a plot of data with a convolution applied
+    return_data (boolean):
+        Default set to False. When true, returns dI/I, s, and time arrays
+        
+    RETURNS: 
+        see above
+    """
 
     coor_txyz, atom_sum, time=load_time_evolving_xyz(path_mol,mol_name,file_type) #load xyz data
     #options: load_time_evolving_xyz, or load_time_evolving_xyz1
 
     time_steps = len(time)
-    t_interval = float(time[1])-float(time[0])
+    if float(time[1])-float(time[0])!=0:
+        t_interval = float(time[1])-float(time[0])
+        print(t_interval)
+    elif float(time[1])-float(time[0]) == 0:
+        t_interval = tstep
+        print(t_interval)
+
     col = int(160/t_interval)
     space_for_convol = int(200/t_interval)
+
         
     I0,I0_at,I0_mol,s_new = get_I_from_xyz(coor_txyz[0],atom_sum, s_max)
     delta_I_over_I_t = get_2d_matrix(time_steps+space_for_convol*2,len(s_new))
@@ -764,14 +839,21 @@ def trajectory_sim(path_mol, mol_name, file_type,s_max=12):
         delta_I_over_I_t[i+time_steps+space_for_convol]=delta_I_over_I_t[time_steps+space_for_convol-1]
     
     delta_I_over_I_t=np.array(delta_I_over_I_t)
-    plot_delay_simulation_with_conv(delta_I_over_I_t*100,len(s),col,t_interval,time_steps,space_for_convol)
+    t_fs = np.linspace(-space_for_convol, 1000+space_for_convol, len(delta_I_over_I_t))
+    if plot == True:
+        dI_I_conv = apply_conv(delta_I_over_I_t*100,len(s),col,t_interval,time_steps,space_for_convol, plot=True)
 
-    plt.ylabel('s/angs^-1')
-    plt.yticks(np.arange(0,len(s),len(s)/s.max()),np.arange(0,s.max(),1))
-    plt.axvline(x=space_for_convol,linestyle='--')
-    plt.title('delta_I/I')
-    plt.show()
-    return
+        plt.ylabel('s/angs^-1')
+        plt.yticks(np.arange(0,len(s),len(s)/s.max()),np.arange(0,s.max(),1))
+        plt.axvline(x=space_for_convol,linestyle='--')
+        plt.title('delta_I/I')
+        plt.show()
+    else:
+        dI_I_conv = apply_conv(delta_I_over_I_t*100, len(s), col, t_interval, time_steps, space_for_convol, plot=False)
+    if return_data == True:
+        return delta_I_over_I_t, dI_I_conv.T, s, t_fs
+    else:
+        return
 
 
 def freq_sim(path_mol, tra_mol_name, file_type, s_max=12, evolutions=10, r_max=800, damp_const=33, plot=True):
@@ -1390,6 +1472,162 @@ def get_exp_sM_PDF(coor, atom_sum, s_exp, dI, freq_filter=False, polyfit=False, 
 
     return sM, pdf_exp, r   
 
+
+def save_data(file_name, group_name, run_number, data_dict, group_note=None):
+    """
+    Saves the azimuthal average and stage positions after processing to an h5 file with the specified file_name. The group name specifies the 
+    group subset the data relates to and the run number tags the number. For example, when running large data sets, each run will be a subset
+    of data that was processed. If you have multiple experiments that can be grouped, you can save them with different group names to the same 
+    h5 file. The saved data is used for further analysis. 
+
+    ARGUMENTS:
+
+    file_name (str):
+        unique file name for the data to be saved. Can specify a full path. 
+    group_name (str):
+        label for the group of data that is being processed
+    run_number (int):
+        specifies ths subset of data being processed
+    data_dict (dictionary):
+        dictionary containing variable labels and data sets to be saved. Can contain any number of data_sets
+        i.e., data_dict = {'I' : norm_data, 'stage_positions' : stage_positions, 'centers' : centers}
+
+    OPTIONAL ARGUMENTS:
+
+    group_note (str):
+        Note to attach to each group to explain any relevant details about the data processing (i.e., Used average center)
+    
+    RETURNS:
+
+    Doesn't return anything but creates an h5 file with the stored data or appends already existing file.
+    """
+
+    with h5py.File(file_name, 'a') as f:
+        # Create or access the group
+        if group_name in f:
+            group = f[group_name]
+        else:
+            group = f.create_group(group_name)
+        
+        # Add a description of the data (if provided)
+        if group_note:
+            group.attrs['note'] = group_note
+        
+        for dataset_name, data in data_dict.items():
+            # Append run number to the dataset name
+            run_dataset_name = f"{dataset_name}_run_{run_number}"
+            
+            # Create or overwrite the dataset within the group
+            if run_dataset_name in group:
+                del group[run_dataset_name]
+            group.create_dataset(run_dataset_name, data=data)
+
+        f.close()         
+    print(f"Data for run {run_number} saved to group '{group_name}' in {file_name} successfully.")
+    return
+
+
+def add_to_h5(file_name, group_name, var_data_dict, run_number=None):
+    """
+    Appends multiple datasets to a specified group in an h5 file with a specific run number.
+    
+    ARGUMENTS:
+    
+    file_name (str):
+        Name and path to h5 file you wish to append data to.
+    group_name (str):
+        Subgroup within the h5 dataset that you wish to append data to.
+    var_data_dict (dict):
+        Dictionary where keys are variable names and values are arrays of data to add to the h5 file.
+    run_number (int):
+        Run number to specify which run the data belongs to.
+    """
+
+    # Open the HDF5 file in append mode
+    with h5py.File(file_name, 'a') as f:
+        # Check if the group exists, create if not
+        if group_name in f:
+            group = f[group_name]
+        else:
+            group = f.create_group(group_name)
+
+        if run_number == None:
+            for var_name, var_data in var_data_dict.items():
+                group.create_dataset(var_name, data=var_data)
+                print(f"Varriable '{var_name}' added to group '{group_name}' successfully.")
+            f.close()
+            return
+        else:
+            for var_name, var_data in var_data_dict.items():
+                # Create the run-specific variable name
+                run_var_name = f"{var_name}_run_{run_number}"
+                
+                # Delete the existing dataset if it exists
+                if run_var_name in group:
+                    print(f"Warning: Dataset '{run_var_name}' already exists in group '{group_name}'. It will be overwritten.")
+                    del group[run_var_name]
+                
+                # Create the dataset within the group
+                group.create_dataset(run_var_name, data=var_data)
+                print(f"Variable '{run_var_name}' added to group '{group_name}' successfully.")
+            f.close()
+            return
+
+
+def load_trajectory_h5(file_name, group_name):
+    """
+    Reads an HDF5 file and groups datasets by their numeric run ID (e.g., '0014').
+    
+    ARGUMENTS:
+    
+    file_name (str):
+        Name and path to the HDF5 file to read from.
+    group_name (str):
+        The name of the group to search in the HDF5 file.
+    
+    RETURNS:
+    
+    A dictionary where the keys are run IDs (e.g., '0014') and the values 
+    are dictionaries with dataset names as keys and the dataset values as NumPy arrays.
+    """
+    run_dict = defaultdict(dict)  # Dictionary to group datasets by run ID
+    
+    # Open the HDF5 file
+    with h5py.File(file_name, 'r') as f:
+        if group_name not in f:
+            print(f"Group '{group_name}' not found in the file.")
+            return run_dict
+        
+        group = f[group_name]
+        
+        # Regex pattern to extract the numeric run ID (e.g., '0014')
+        pattern = re.compile(r'run_(\d{4})')
+        
+        # Loop through the datasets in the group
+        for dataset_name in group.keys():
+            match = pattern.search(dataset_name)
+            if match:
+                run_id = match.group(1)  # Extract the numeric run ID (e.g., '0014')
+                variable_name = dataset_name.split(f'_run_{run_id}')[0]  # Extract the variable name
+                run_dict[run_id][variable_name] = group[dataset_name][:]
+            else:
+                print(f"Warning: Could not extract run ID from '{dataset_name}'")
+    
+    return dict(run_dict)  # Convert defaultdict to regular dict
+
+
+def _print_h5_structure(group_name, run_number):
+    if isinstance(run_number, h5py.Group):
+        print(f"Group: {group_name}")
+    elif isinstance(run_number, h5py.Dataset):
+        print(f"Dataset: {group_name}")
+
+
+def inspect_h5(file_name):
+    """ Inspects and prints structure of the h5 file of interest"""
+    with h5py.File(file_name, 'r') as f:
+        f.visititems(_print_h5_structure)
+        f.close()
 
 # written by SLAC People
 def remove_nan_from_data(s_exp,I_exp):
