@@ -14,6 +14,8 @@ from scipy.optimize import curve_fit
 import scipy.stats
 from PIL import Image
 from matplotlib.colors import TwoSlopeNorm
+from mendeleev import element
+from colour import Color
 warnings.simplefilter("ignore")
 from gued_globals import *
 
@@ -259,6 +261,49 @@ def _load_xyz(xyz_file):
     return coordinates, atom_sum
 
 
+def get_bonds(xyz_file):
+
+    coordinates, atom_sum = _load_xyz(xyz_file)
+    atom_ids = coordinates[:,0]
+    x = coordinates[:,1].astype(float)
+    y = coordinates[:,2].astype(float)
+    z = coordinates[:,3].astype(float)
+
+
+    atomic_num = []
+    radii = []
+    colors = []
+
+    for ident in atom_ids:
+        elem = element(ident)
+        num = elem.atomic_number
+        atomic_num.append(num)
+        rad = elem.atomic_radius
+        radii.append(rad / 75)
+        color = elem.cpk_color
+        new = Color(color).rgb
+        colors.append(new)
+
+    connections = []
+    lengths = []
+    for i in range(0, len(atomic_num)):
+        for j in range(i+1, len(atomic_num)):
+            if i == j:
+                pass
+            bond_length = (x[i] - x[j]) ** 2 + (y[i] - y[j]) ** 2 + (z[i] - z[j]) ** 2
+            bond_length = bond_length ** 0.5
+            max_bond_length = 1.1 * (radii[i] + radii[j])
+
+            if bond_length < max_bond_length:
+                #connections.append((atom_ids[i], atom_ids[j]))
+                print(atom_ids[i], atom_ids[j])
+                print(bond_length, max_bond_length)
+                #lengths.append(bond_length)
+
+    # lengths = np.array(lengths)
+    # return connections, lengths
+
+
 def load_freq_xyz(path_mol, mol_name, file_type):
     """
     Reads in a frequency trajectory .xyz file containing many structures which evolve over time generated from programs such as Gaussian or
@@ -319,6 +364,59 @@ def load_freq_xyz(path_mol, mol_name, file_type):
     re = np.array(re)
 
     return re, atom_sum, time
+
+
+def load_traj_xyz(path_mol, mol_name, file_type):
+    """
+    Reads in a simulated trajectory .xyz file containing many structures which evolve over time generated from programs such as Gaussian or
+    ORCA. The file also sometimes contains information on the time points for each structural evolution.
+
+    ARGUMENTS:
+
+    path_mol (string):
+        path to the directory of the molecular structure
+    mol_name (string):
+        file name of the structural file used for the simulation
+    file_type (string):
+        either xyz or csv depending on what the file being used is.
+
+    RETURNS:
+
+    coordinates (array):
+        array of atom symbol, x, y, z, and atom number for each time step
+    atom_sum (int):
+        total number of atoms in the molecule
+    time (array):
+        time points corresponding to the simulation in fs
+    """
+
+    filename = path_mol + mol_name + file_type
+    xyz_file = filename
+    file = open(xyz_file, 'r')
+    text = file.readlines()
+    file.close()
+    count = len(text)
+    coordinates = []
+
+    atom_sum = list(map(int, text[0].split()))
+    atom_sum = atom_sum[0]
+    iteration = atom_sum + 2
+
+    groups = np.arange(0, count, (iteration))
+
+    for j in range(len(groups)):
+        temp = []
+        lines = np.arange(groups[j] + 2, groups[j] + iteration)
+        for line in lines:
+            string = list(map(str, text[line].split()))
+            atom_num = sym_to_no(string[0])
+            info = string[0:4] + [str(atom_num)]
+            temp.append(info)
+            # print(string)
+        coordinates.append(temp)
+
+    coordinates = np.array(coordinates)
+    return coordinates
 
 
 def _get_modified_coor(coor, atom_sum):
