@@ -1517,7 +1517,7 @@ def preprocess_for_azimuthal_checking(center, dat):
     return xlength, rmat
 
 
-def cleaning_2d_data(center, dat, std_factor=STD_FACTOR):
+def cleaning_2d_data(center, dat, std_factor=STD_FACTOR, fill_value='nan'):
     """Runs the outlier removal algorithm to check for instances of pixels which are outside of the radial average. """
     xlength, rmat = preprocess_for_azimuthal_checking(center, dat)
     res2d = np.copy(dat)
@@ -1536,7 +1536,7 @@ def cleaning_2d_data(center, dat, std_factor=STD_FACTOR):
                 
         if mask_detect==False:
             # remove value that higher or lower than correct_factor*standard deviation
-            roi = outlier_rev_algo(roi, std_factor=std_factor)
+            roi = outlier_rev_algo(roi, std_factor=std_factor, fill_value=fill_value)
         
         res2d[rmat==int(i+1)] = np.copy(roi)
     return res2d
@@ -1551,7 +1551,7 @@ def outlier_rev_algo(dat1d, std_factor=STD_FACTOR, fill_value = 'nan'):
     return dat1d
 
 
-def remove_radial_outliers_pool(data_array, centers, plot=False, return_pct=False):
+def remove_radial_outliers_pool(data_array, centers, fill_value='nan', plot=False, return_pct=False):
     """
     Removes instances of outlier pixels based on the radial average of the image. Runs the hidden function _remove_radial_outliers in parallel. 
     Works by first converting an individual array to polar coordinates and remaps to create an average image. Then performs a logical check on 
@@ -1580,32 +1580,39 @@ def remove_radial_outliers_pool(data_array, centers, plot=False, return_pct=Fals
 
     clean_data = []
     rmv_count = []
-
+    
     if len(centers) > 2:
-        print("Using all center values ")
+        print("Using all center values")
         print("Removing radial outliers from all data")
+        
+        # Use partial to include the optional parameter in the cleaning_2d_data function
+        cleaning_with_optional_param = partial(cleaning_2d_data, fill_value=fill_value)
+        
         with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
-            # Zip the arrays together and submit to the executor
-            #results = list(executor.map(lambda center, data: cleaning_2d_data(center, data), centers, data_array))
-            results = list(executor.map(cleaning_2d_data, centers, data_array))
+            # Pass the partially defined function to map
+            results = list(executor.map(cleaning_with_optional_param, centers, data_array))
+        
         for result in results:
             clean_image = result
             clean_data.append(clean_image)
             rmv = np.isnan(clean_image)
-            rmv_count.append(np.sum(rmv)/(len(data_array[0][0])*len(data_array[0][1])))
+            rmv_count.append(np.sum(rmv) / (len(data_array[0][0]) * len(data_array[0][1])))
 
     elif len(centers) == 2:
         print("Using average center")
         print("Removing radial outliers from all data")
+        
+        cleaning_with_optional_param = partial(cleaning_2d_data, centers, fill_value=fill_value)
+        
         with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
-            futures = [executor.submit(partial(cleaning_2d_data, centers), data) for data in data_array]
+            futures = [executor.submit(cleaning_with_optional_param, data) for data in data_array]
             results = [future.result() for future in futures]
-
+        
         for result in results:
             clean_image = result
             clean_data.append(clean_image)
             rmv = np.isnan(clean_image)
-            rmv_count.append(np.sum(rmv)/(len(data_array[0][0])*len(data_array[0][1])))
+            rmv_count.append(np.sum(rmv) / (len(data_array[0][0]) * len(data_array[0][1])))
 
     clean_data = np.array(clean_data)
     rmv_count = np.array(rmv_count)*100
