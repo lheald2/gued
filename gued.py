@@ -18,6 +18,8 @@ import matplotlib.pyplot as plt
 import matplotlib
 import pandas as pd
 from scipy import signal
+from scipy.interpolate import PchipInterpolator
+from scipy.ndimage import median_filter
 import concurrent.futures
 from functools import partial
 import h5py
@@ -1441,60 +1443,6 @@ def find_center_pool(data_array, plot=True, print_stats=False):
     return center_x, center_y
 
 
-def _median_filter(image, kernel_size = 5):
-    """
-    Applies the scipy.ndimage.median_filter function to the image then returns the filtered image"""
-
-    #corners = (np.median(data_array_1d[-50:, -50:]), np.median(data_array_1d[-50:, :50]), np.median(data_array_1d[:50, -50:]), 
-                    #np.median(data_array_1d[:50, :50]))
-    #floor = float(np.mean(corners))
-    from scipy.ndimage import median_filter
-    filt_data = median_filter(image, kernel_size)
-
-    return filt_data
-
-
-def median_filter_pool(data_array, plot=True):
-    """Takes in a large 3D array of data and applies the scipy.ndimage.median_filter on them in parallel processing using the hidden function
-    _median_filter.
-
-    ARGUMENTS: 
-
-    data_array (3d array):
-        array of all images
-    
-    OPTIONAL ARGUMENTS:
-
-    plot(boolean): Default set to True
-        When true, plots an example of the original and of the filtered image
-
-    RETURNS: 
-        
-    filtered_data (3d array):
-        filtered data array of the same size as the input array"""
-    
-    filtered_data = []
-    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
-        results = executor.map(_median_filter, data_array)
-        
-    for result in results:
-        filtered_data.append(result)
-    
-    filtered_data = np.array(filtered_data)
-
-    if plot == True:
-        plt.figure(figsize=FIGSIZE)
-        plt.subplot(1,2,1)
-        plt.imshow(data_array[0])
-        plt.title("Original Image")
-        
-        plt.subplot(1,2,2)
-        plt.imshow(filtered_data[0])
-        plt.title("Filtered Image")
-        plt.show()
-
-    return filtered_data
-
 ### Azimuthal Averaging and Radial Outlier Removal Functions
 # todo: clean and optimize
 def cart2pol(x, y): 
@@ -1641,6 +1589,128 @@ def remove_radial_outliers_pool(data_array, centers, fill_value='nan', plot=Fals
     else:
         return clean_data
 
+
+def fill_missing(center, image):
+    """
+    ARGUMENTS:
+
+    center (tuple):
+        center value for the image
+    image(2D array):
+        image array
+
+    NOTES
+    Pchip interpolation: We use scipy.interpolate.PchipInterpolator to fill missing values for the first 200 elements (aziFill[1:200]). 
+    We create a mask to identify NaN values and then interpolate only those missing points.
+    Nearest interpolation: pandas.Series.fillna(method='nearest') is used for filling NaN values from index 400 onwards with the nearest 
+    available values.
+    """
+
+    xlength, rmat = preprocess_for_azimuthal_checking(center, image)
+
+    _, azi_fill, _ = azimuthal_integration_alg(center, image) # Azimuthal average with nan values
+
+    # Part 1: Fill missing values in the first 200 elements using 'polynomial'  interpolation
+    azi_fill[:200] = pd.Series(azi_fill[:200]).interpolate(method='polynomial', order=1).to_numpy()
+
+    # Part 2: Fill missing values from index 400 onwards using 'nearest' interpolation
+    azi_fill[400:] = pd.Series(azi_fill[400:]).interpolate(method='nearest').to_numpy()
+    print(azi_fill.shape)
+    new_image = np.copy(image)
+
+    for i in range(xlength):
+        roi = np.copy(image[rmat==int(i+1)])
+        if len(roi)==0:
+            break
+        if int(i+1)>=len(azi_fill):
+            break
+        index = np.isnan(roi)
+        #print(index)
+        roi[index] = azi_fill[i+1] #fill outliers with interpolated value
+        
+        new_image[rmat==int(i+1)] = np.copy(roi)
+        
+    return new_image
+
+
+
+def _median_filter(image, kernel_size = 5):
+    """
+    Applies the scipy.ndimage.median_filter function to the image then returns the filtered image"""
+
+    #corners = (np.median(data_array_1d[-50:, -50:]), np.median(data_array_1d[-50:, :50]), np.median(data_array_1d[:50, -50:]), 
+                    #np.median(data_array_1d[:50, :50]))
+    #floor = float(np.mean(corners))
+    filt_data = median_filter(image, kernel_size)
+
+    return filt_data
+
+
+def median_filter_pool(data_array, centers, plot=True):
+    """Takes in a large 3D array of data and applies the scipy.ndimage.median_filter on them in parallel processing using the hidden function
+    _median_filter.
+
+    ARGUMENTS: 
+
+    data_array (3d array):
+        array of all images
+    
+    OPTIONAL ARGUMENTS:
+
+    plot(boolean): Default set to True
+        When true, plots an example of the original and of the filtered image
+
+    RETURNS: 
+        
+    filtered_data (3d array):
+        filtered data array of the same size as the input array"""
+    
+    nan_idx = np.isnan(data_array) # get nan locations in order to replace later
+    
+    filled_data = []
+    
+    if len(centers) > 2:
+        print("Using all center values ")
+        with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
+            results = list(executor.map(fill_missing, centers, data_array))
+        for result in results:
+            filled_data.append(result)
+
+    elif len(centers) == 2:
+        print("Using average center")
+        with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
+            futures = [executor.submit(partial(fill_missing, centers), data) for data in data_array]
+            results = [future.result() for future in futures]
+
+        for result in results:
+            filled_data.append(result)
+
+    filled_data = np.array(filled_data)
+    print("Done filling nan values, starting median filter")
+    
+    filtered_data = []
+    with concurrent.futures.ProcessPoolExecutor(max_workers=MAX_PROCESSORS) as executor:
+        results = executor.map(_median_filter, filled_data)
+        
+    for result in results:
+        filtered_data.append(result)
+    
+    filtered_data = np.array(filtered_data)
+
+    filtered_data[nan_idx] = np.nan # replace bad pixels with nan after applying median filter
+
+    if plot == True:
+        plt.figure(figsize=FIGSIZE)
+        plt.subplot(1,2,1)
+        plt.imshow(data_array[0])
+        plt.title("Original Image")
+        
+        plt.subplot(1,2,2)
+        plt.imshow(filtered_data[0])
+        plt.title("Filtered Image")
+        plt.show()
+
+    return filtered_data
 
 def azimuthal_integration_alg(center, image, max_azi=450):
     """
