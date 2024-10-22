@@ -506,6 +506,44 @@ def _sort_files(file_order, stage_positions):
     return idx_list
 
 
+def add_detector_mask(data_array, mask, fill_value = np.nan, plot=False):
+    """Applies a detector mask based on a boolean array."""
+    # Step 1: Expand the 2D mask to 3D for broadcasting
+    # This ensures the mask can be applied to each 2D image
+
+    #print(f"Number of bad pixels = {np.nansum(mask)}")
+    mask_3d = np.broadcast_to(mask, data_array.shape)
+
+    # Step 2: Apply the mask across the 3D array, replacing values where mask == 1 with np.nan
+    masked_data = np.where(mask_3d != 0, fill_value, data_array)
+    #print(f"Number of nan values in single image is {np.sum(np.isnan(masked_data[0]))}")
+
+    if plot==True:
+        test = masked_data[0]
+        plt.figure(figsize=(14,8))
+        plt.subplot(1, 3, 1)
+        plt.imshow(test, cmap='jet')
+        plt.xlabel('Pixel')
+        plt.ylabel('Pixel')
+        plt.title('Linear Scale(data)')
+
+        plt.subplot(1, 3, 2)
+        plt.imshow(np.log(test), cmap='jet')
+        plt.xlabel('Pixel')
+        plt.ylabel('Pixel')
+        plt.title('Log Scale(data)')
+
+        plt.subplot(1, 3, 3)
+        plt.hist(test.reshape(-1), bins=30, edgecolor="r", histtype="bar", alpha=0.5)
+        plt.xlabel('Pixel Intensity')
+        plt.ylabel('Pixel Number')
+        plt.title('Hist of the pixel intensity(data)')
+        plt.yscale('log')
+        plt.tight_layout()
+        plt.show()
+
+    return masked_data
+
 ### Cleaning Functions 
 
 def remove_counts(data_array, stage_positions, file_order, counts, added_range = [], std_factor=STD_FACTOR, plot=False):
