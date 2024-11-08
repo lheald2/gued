@@ -104,12 +104,12 @@ Another notebook that will likely be helpful is the `GUED_Simulations.ipynb` not
 
 ## Acknowledgements: 
 Code was adapted from multiple sources including:  
-Caidan Moore  
-Cuong Le  
-Yusong Liu  
+Caidan Moore (Case Western University)  
+Cuong Le (University of Nebraska - Lincoln)  
+Yusong Liu (Stanford Linear Accelerator)  
+Keke Chen (Tsinghua University)
 
-The entire Centurion group at the University of Nebraska - Lincoln offered advice and guidance throughout the development. 
-The Stanford National Accelerator Laboratory - MeV-UED Facility Staff offered advice and guidance throughout development.
+The entire Centurion group at the University of Nebraska - Lincoln and he Stanford National Accelerator Laboratory - MeV-UED Facility Staff offered advice and guidance throughout the development. 
 
 ## Dependencies:
 

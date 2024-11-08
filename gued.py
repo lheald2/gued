@@ -1869,9 +1869,17 @@ def get_azimuthal_average_pool(data_array, centers, normalize=False, plot=False)
 
 
     if plot == True:
-        plt.figure()
+        plt.figure(figsize=FIGSIZE)
+        plt.subplot(1,2,1)
         plt.plot(average_data[0])
         plt.title("Example of Azimuthal Average")
+        
+        plt.subplot(1,2,2)
+        fit_line = np.linspace(np.nanmax(np.log(average_data[0])), np.nanmin(np.log(average_data[0])), len(average_data[0]))
+        #print(fit_line)
+        plt.plot(np.log(average_data[0]))
+        plt.plot(fit_line, color='k')
+        plt.title("Example of log Azimuthal Average")
         plt.show()
 
     return average_data, std_data
