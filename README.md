@@ -127,7 +127,7 @@ Cuong Le (University of Nebraska - Lincoln)
 Yusong Liu (Stanford Linear Accelerator)  
 Keke Chen (Tsinghua University)
 
-Additionally, the entire Centurion group at the University of Nebraska - Lincoln and he Stanford National Accelerator Laboratory - MeV-UED Facility Staff offered advice and guidance throughout the development. 
+Additionally, the entire Centurion group at the University of Nebraska - Lincoln and the Stanford National Accelerator Laboratory - MeV-UED Facility Staff offered advice and guidance throughout the development. 
 
 ## Relevant Literature
 If you're interested in learning more about gas-phase ultrafast electron diffraction, consider reading the following 
