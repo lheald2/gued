@@ -4,7 +4,7 @@ Written by Lauren F Heald
 Email: lheald2@unl.edu
 
 ## About:
-This package was created for data processing and analysis for experiments conducted at the MeV-UED facility at the Linac Coherent Light Source at the Stanford Linear Accelerator. The main packages, `gued.py` and `gued_theory.py` contain all the relevant functions for data processing, and each Jupyter Notebook serves a specific function for cleaning, processing, and saving image based scattering data. This package is developed and maintained by Lauren F. Heald, PhD and the Centurion Lab at the University of Nebraska - Lincoln. 
+This package was created for data processing and analysis for experiments conducted at the MeV-UED facility at the Linac Coherent Light Source at the Stanford Linear Accelerator. The main packages, `gued.py` and `gued_theory.py` contain all the relevant functions for data processing, and each Jupyter Notebook serves a specific function for cleaning, processing, and saving image based scattering data. This package is developed and maintained by Lauren F. Heald, PhD.
 
 ### Current Status:
   The package has been rigorously tested with multiple data sets collected at the MeV-UED facility. However, updates are posted often as lessons are learned and new tricks are implemented. Please note, this package is meant to serve as a backbone for data processing, but further noise reduction and analysis are encouraged. If you have questions or concerns, email Lauren Heald at lheald2@unl.edu with subject line "GUED Help". 
