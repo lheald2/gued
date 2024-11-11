@@ -1,4 +1,7 @@
-### Global Variables for IR CF3I data set
+"""Python file for establishing global variables that change from experiment to experiment. Each global variable should be notated with 
+all caps."""
+
+### Global Variables for o-ntph data set
 
 # Variable for reading files
 SEPARATORS = ['-', '_']
