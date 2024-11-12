@@ -117,7 +117,7 @@ Another notebook that will likely be helpful is the `GUED_Simulations.ipynb` not
 
 ## Citation
 If you're relying heavily on this package, please consider citing us following the citation style for open sources packages following the example below:  
-```Heald, L.F. & Centurion, M. (2024) GUED (Version 1.0.0) [Computer Software] Github Repository. https://github.com/lheald2/gued```
+```Heald, L.F. (2024) GUED (Version 1.0.0) [Computer Software] Github Repository. https://github.com/lheald2/gued```
 See `LICENSE.md` for more information. 
 
 ## Acknowledgements: 
