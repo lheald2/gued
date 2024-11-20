@@ -98,9 +98,7 @@ MAX_PROCESSORS = 6
 FIGSIZE = (12,4)
 
 # Path for Theory Package
-
-PATH_DCS = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\Coding Lab Notebook\\gued_package\\GUED_Analysis\\packages\\dcs_repositiory\\3.7MeV\\'
-#path_dcs = '/sdf/home/l/lheald2/GUED/jupyter_notebook/user_notebooks/dcs_repository/3.7MeV/'
+PATH_DCS = 'gued_package\\GUED_Analysis\\packages\\dcs_repositiory\\3.7MeV\\'
 ```
 
 An example notebook named `Fast_Analysis.ipynb` should be run as the second step in the data processing. This notebook applies and plots all the above steps after having averaged based on the stage position associated with the data. This notebook will get you to the ΔI/I. 
