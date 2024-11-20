@@ -41,8 +41,8 @@ Different notebooks within the repository serve different purposes but the gener
     * This is by far the most time-consuming part of data processing. __Only do this with small data sets (i.e., after stage averaging) unless you're willing to spend a long time processing data.__ Takes 10 minutes per 100 images running in parallel.
 
 
-10. __Fill Missing Values (optional)__
-    * `gued.fill_missing` can be used to replace NaN values with the radial average for that detector position. This helps remove artifacts that could be caused by median filtering with NaN values present. 
+10. __Fill Missing Values (built in to median filter)__
+    * `gued.fill_missing` can be used to replace NaN values with the radial average for that detector position. This helps remove artifacts that could be caused by median filtering with NaN values present. This functionality is still being tested. 
 
 11. __Apply median filter__
     * The function `gued.median_filter` applies a median filter to the data. Must replace `np.nan` values with radial average so this function is done in concert with the radial outlier removal (often not necessary and occasionally buggy. Still working on it).
