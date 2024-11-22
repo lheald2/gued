@@ -1750,6 +1750,7 @@ def median_filter_pool(data_array, centers, plot=True):
 
     return filtered_data
 
+
 def azimuthal_integration_alg(center, image, max_azi=450):
     """
     Generate 1D data from 2D image using azimuthal integration.
@@ -1803,7 +1804,7 @@ def azimuthal_integration_alg(center, image, max_azi=450):
     return np.array(s0), np.array(azi_dat), np.array(azi_err)
 
 
-def get_azimuthal_average_pool(data_array, centers, normalize=False, plot=False):
+def get_azimuthal_average_pool(data_array, centers, normalize=False, plot=False, return_info=False):
     """
     Code for getting the azimuthal average of each image for a given center. 
 
@@ -1864,28 +1865,35 @@ def get_azimuthal_average_pool(data_array, centers, normalize=False, plot=False)
     std_data = np.array(std_data)
 
     if normalize == True:
-        norm_data = normalize_to_baseline(average_data)
+        norm_data, norm_factors = normalize_to_baseline(average_data, return_factor=True)
         average_data = norm_data
 
 
     if plot == True:
         plt.figure(figsize=FIGSIZE)
-        plt.subplot(1,2,1)
+        plt.subplot(1,3,1)
         plt.plot(average_data[0])
         plt.title("Example of Azimuthal Average")
         
-        plt.subplot(1,2,2)
+        plt.subplot(1,3,2)
         fit_line = np.linspace(np.nanmax(np.log(average_data[0])), np.nanmin(np.log(average_data[0])), len(average_data[0]))
         #print(fit_line)
         plt.plot(np.log(average_data[0]))
         plt.plot(fit_line, color='k')
         plt.title("Example of log Azimuthal Average")
+
+        plt.subplot(1,3,3)
+        plt.plot(norm_factors)
+        plt.title("Normalization Factors")
         plt.show()
+    
+    if return_info == True:
+        return average_data, std_data, norm_factors
+    else:
+        return average_data, std_data
 
-    return average_data, std_data
 
-
-def normalize_to_baseline(data_array2d, min_val=50, max_val=100):
+def normalize_to_baseline(data_array2d, min_val=50, max_val=100, return_factor=False):
     """
     Normalizes a 2d data set based on the average of the data between the min_val and the max_val
 
@@ -1912,14 +1920,20 @@ def normalize_to_baseline(data_array2d, min_val=50, max_val=100):
     data_mean = np.nanmean(data_array2d, axis=0)
     norm_factor = np.nansum(data_mean[min_val:max_val])
     data_norm = []
+    norm_factors = []
     for i in range(len(data_array2d)):
         offset = np.nansum(data_array2d[i, min_val:max_val])
         norm = data_array2d[i] * (norm_factor / offset)
         data_norm.append(norm)
+        norm_factors.append((norm_factor / offset))
 
     data_norm = np.array(data_norm)
+    norm_factors = np.array(norm_factors)
 
-    return data_norm
+    if return_factor == True:
+        return data_norm, norm_factors
+    else:
+        return data_norm
 
 
 def normalize_to_range(data_array, min_val = -1, max_val=1):
