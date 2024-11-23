@@ -4,7 +4,7 @@ Written by Lauren F Heald
 Email: lheald2@unl.edu
 
 ## About:
-This package was created for data processing and analysis for experiments conducted at the MeV-UED facility at the Linac Coherent Light Source at the Stanford Linear Accelerator. The main packages, `gued.py` and `gued_theory.py` contain all the relevant functions for data processing, and each Jupyter Notebook serves a specific function for cleaning, processing, and saving image based scattering data. This package is developed and maintained by Lauren F. Heald, PhD and the Centurion Lab at the University of Nebraska - Lincoln. 
+This package was created for data processing and analysis for experiments conducted at the MeV-UED facility at the Linac Coherent Light Source at the Stanford Linear Accelerator. The main packages, `gued.py` and `gued_theory.py` contain all the relevant functions for data processing, and each Jupyter Notebook serves a specific function for cleaning, processing, and saving image based scattering data. This package is developed and maintained by Lauren F. Heald, PhD.
 
 ### Current Status:
   The package has been rigorously tested with multiple data sets collected at the MeV-UED facility. However, updates are posted often as lessons are learned and new tricks are implemented. Please note, this package is meant to serve as a backbone for data processing, but further noise reduction and analysis are encouraged. If you have questions or concerns, email Lauren Heald at lheald2@unl.edu with subject line "GUED Help". 
@@ -41,8 +41,8 @@ Different notebooks within the repository serve different purposes but the gener
     * This is by far the most time-consuming part of data processing. __Only do this with small data sets (i.e., after stage averaging) unless you're willing to spend a long time processing data.__ Takes 10 minutes per 100 images running in parallel.
 
 
-10. __Fill Missing Values (optional)__
-    * `gued.fill_missing` can be used to replace NaN values with the radial average for that detector position. This helps remove artifacts that could be caused by median filtering with NaN values present. 
+10. __Fill Missing Values (built in to median filter)__
+    * `gued.fill_missing` can be used to replace NaN values with the radial average for that detector position. This helps remove artifacts that could be caused by median filtering with NaN values present. This functionality is still being tested. 
 
 11. __Apply median filter__
     * The function `gued.median_filter` applies a median filter to the data. Must replace `np.nan` values with radial average so this function is done in concert with the radial outlier removal (often not necessary and occasionally buggy. Still working on it).
@@ -98,9 +98,7 @@ MAX_PROCESSORS = 6
 FIGSIZE = (12,4)
 
 # Path for Theory Package
-
-PATH_DCS = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\Coding Lab Notebook\\gued_package\\GUED_Analysis\\packages\\dcs_repositiory\\3.7MeV\\'
-#path_dcs = '/sdf/home/l/lheald2/GUED/jupyter_notebook/user_notebooks/dcs_repository/3.7MeV/'
+PATH_DCS = 'gued_package\\GUED_Analysis\\packages\\dcs_repositiory\\3.7MeV\\'
 ```
 
 An example notebook named `Fast_Analysis.ipynb` should be run as the second step in the data processing. This notebook applies and plots all the above steps after having averaged based on the stage position associated with the data. This notebook will get you to the ΔI/I. 
@@ -117,7 +115,7 @@ Another notebook that will likely be helpful is the `GUED_Simulations.ipynb` not
 
 ## Citation
 If you're relying heavily on this package, please consider citing us following the citation style for open sources packages following the example below:  
-```Heald, L.F. & Centurion, M. (2024) GUED (Version 1.0.0) [Computer Software] Github Repository. https://github.com/lheald2/gued```
+```Heald, L.F. (2024) GUED (Version 1.0.0) [Computer Software] Github Repository. https://github.com/lheald2/gued```
 See `LICENSE.md` for more information. 
 
 ## Acknowledgements: 
@@ -127,7 +125,7 @@ Cuong Le (University of Nebraska - Lincoln)
 Yusong Liu (Stanford Linear Accelerator)  
 Keke Chen (Tsinghua University)
 
-Additionally, the entire Centurion group at the University of Nebraska - Lincoln and he Stanford National Accelerator Laboratory - MeV-UED Facility Staff offered advice and guidance throughout the development. 
+Additionally, the entire Centurion group at the University of Nebraska - Lincoln and the Stanford National Accelerator Laboratory - MeV-UED Facility Staff offered advice and guidance throughout the development. 
 
 ## Relevant Literature
 If you're interested in learning more about gas-phase ultrafast electron diffraction, consider reading the following 
