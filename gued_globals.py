@@ -1,28 +1,25 @@
 """Python file for establishing global variables that change from experiment to experiment. Each global variable should be notated with 
 all caps."""
-### Global Variables for s1 data set
+### Global Variables for LUED data set
 
 # Variable for reading files
-SEPARATORS = ['-', '_']
+SEPARATORS = '_'
 
 # Variables for Center Finding Algorithm
-CENTER_GUESS = (460, 460)
+CENTER_GUESS = (465, 475)
 RADIUS_GUESS = 35
 DISK_RADIUS = 3
-THRESHOLD = 0
+THRESHOLD = 3100
 
 # Variable for Generating Background
 CORNER_RADIUS = 20
 CHECK_NUMBER = 50
 
 # Variables for Masking
-MASK_CENTER = [476, 468]
-MASK_RADIUS = 42
-ADDED_MASK = [
-    [432, 464, 16],
-    [445, 440, 35], 
-    [471, 427, 22],
-    [476, 482, 35]]
+MASK_CENTER = [525, 515]
+MASK_RADIUS = 50
+#ADDED_MASK = [[546, 470, 40]]
+ADDED_MASK = []
 
 # Used throughout code as the threshold for cutting out date. This is the default value but other values can be set for the functions using
 # std_factor = 4

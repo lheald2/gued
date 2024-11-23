@@ -10,10 +10,9 @@ from scipy.signal import savgol_filter
 import gued
 
 if __name__ == "__main__":
-    data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\Run\\*\\'
-    #data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180623\\Run_01\\'
-    run_path = "*\\*\\ANDOR1_*.tif"
-    
+    data_path = "C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\LUED_Data\\20240829_0638\\"
+    run_path = "*\\ANDOR1_*.tif"
+        
     #bkg_path = '/work/centurion/shared/UED_data/FY18_o-nitrophenol/20180823/Background/*/*/ANDOR1_*.tif'
 
 
@@ -24,16 +23,16 @@ if __name__ == "__main__":
     print(f"{len(files)} found in {full_path} folders")
 
     print('Loading diffraction signal')
-    all_data, all_stages, all_orders, all_counts = gued.get_image_details(files, sort=True, filter_data=False, plot=False)
+    all_data, all_stages, all_orders, all_counts = gued.get_image_details(files, sort=True, filter_data=[0,601], plot=False)
 
-    exp_label = "o-ntph_data"
+    exp_label = "LUED"
     today = date.today()
     print(today)
 
-    file_path = "C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\"
+    file_path = "C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\LUED_Data\\"
     file_name = file_path + f"{exp_label}_{today}.h5"
     print(f"writing data to {file_name}")
-    group_name = "s1"
+    group_name = "CHBr3"
     #group_name = "s4"
     save_factor = 0
 
@@ -77,11 +76,11 @@ if __name__ == "__main__":
         #print(f"Remasking Data with np.nan value for files {groups[i]} to {groups[i+1]}")
         data_array = gued.apply_mask(data_array, fill_value=np.nan, plot=False)
 
-        #print(f"Median Filtering for files {groups[i]} to {groups[i+1]}")
-        clean_data = gued.median_filter_pool(data_array, plot=False)
+        # #print(f"Median Filtering for files {groups[i]} to {groups[i+1]}")
+        # clean_data = gued.median_filter_pool(data_array, plot=False)
 
-        data_array = clean_data
-        del clean_data
+        # data_array = clean_data
+        # del clean_data
 
         print(f"Saving Data for files {groups[i]} to {groups[i+1]} as run number {i}")
         # Make dictionary for saving to h5 file
@@ -106,6 +105,8 @@ if __name__ == "__main__":
     run_numbers = list(np.arange(save_factor,(save_factor+len(groups)),1))
     
     combined_data = gued.read_combined_data(file_name, group_name, variable_names, run_numbers=run_numbers)
+
+    
     centers_x = combined_data['centers'][:,0]
     centers_y = combined_data['centers'][:,1]
 
@@ -138,12 +139,19 @@ if __name__ == "__main__":
         data_array = cleaned_data 
         del cleaned_data
 
+        print(f"Median filtering for files {groups[i]} to {groups[i+1]}")
+        clean_data = gued.median_filter_pool(data_array, centers, plot=False)
+
+        data_array = clean_data
+        del clean_data
+
         print(f"Calculating the Azimuthal average and Normalizing for files {groups[i]} to {groups[i+1]}")
-        norm_data, norm_std = gued.get_azimuthal_average_pool(data_array, centers, normalize=True, plot=False)
+        norm_data, norm_std,  norm_factors = gued.get_azimuthal_average_pool(data_array, centers, normalize=True, plot=False, return_info=True)
 
         data_dictionary = {"clean_images": data_array,
                            "percent_outliers": pct_outliers, 
                            "new_centers": centers,
+                           "normalization_factor": norm_factors,
                            "I": norm_data}
         
         gued.add_to_h5(file_name, group_name, data_dictionary, run_number=(i+save_factor))
