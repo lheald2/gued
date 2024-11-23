@@ -166,7 +166,7 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
                 # stage_pos = np.array(stage_pos)
                 for file in file_names:
                     string = list(
-                        map(str, file.split("\\")))  # Note standard slash usage for windows todo might need to test
+                        map(str, file.split(PATH_SEPARATOR)))  # Note standard slash usage for windows todo might need to test
                     folder_number = string[-3][-3:]
                     string = list(map(str, string[-1].split(SEPARATORS[0])))
                     file_number = int(folder_number + string[1])
@@ -187,7 +187,7 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
                 # stage_pos = [np.float64(file_name[idx_start:idx_end]) for file_name in file_names]
                 # stage_pos = np.array(stage_pos)
                 for file in file_names:
-                    string = list(map(str, file.split("\\")))
+                    string = list(map(str, file.split(PATH_SEPARATOR)))
                     string = list(map(str, string[-1].split(SEPARATORS)))
                     file_order.append(int(string[2]))
                     stage_positions.append(float(string[3]))
@@ -2307,5 +2307,33 @@ def inspect_h5(file_name):
         f.close()
 
         
+def clean_h5(file_name, group_name, key_to_delete):
+    """Removes variables from an h5 file based on a string keyword
+    
+    ARGUMENTS:
+    
+    file_name (str):
+        file name or path that holds the data of interest
+    group_name (str):
+        group subset within the file
+    key_to_delete(str):
+        key related to variable being removed
 
+    """
+    
+    with h5py.File(file_name, "a") as h5_file:
+
+        if group_name in h5_file:
+            group = h5_file[group_name]
+
+            # Collect dataset names that contain "clean_images"
+            datasets_to_remove = [key for key in group.keys() if key_to_delete in key]
+
+            # Remove the matching datasets
+            for dataset in datasets_to_remove:
+                del group[dataset]
+                print(f"Deleted dataset: {group_name}/{dataset}")
+
+        else:
+            print(f"Group '{group_name}' not found in the file.")
 

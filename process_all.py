@@ -105,6 +105,7 @@ if __name__ == "__main__":
     run_numbers = list(np.arange(save_factor,(save_factor+len(groups)),1))
     
     combined_data = gued.read_combined_data(file_name, group_name, variable_names, run_numbers=run_numbers)
+    gued.clean_h5(file_name, group_name, "clean_images") # removing raw images to save space
 
     
     centers_x = combined_data['centers'][:,0]
@@ -148,8 +149,7 @@ if __name__ == "__main__":
         print(f"Calculating the Azimuthal average and Normalizing for files {groups[i]} to {groups[i+1]}")
         norm_data, norm_std,  norm_factors = gued.get_azimuthal_average_pool(data_array, centers, normalize=True, plot=False, return_info=True)
 
-        data_dictionary = {"clean_images": data_array,
-                           "percent_outliers": pct_outliers, 
+        data_dictionary = {"percent_outliers": pct_outliers, 
                            "new_centers": centers,
                            "normalization_factor": norm_factors,
                            "I": norm_data}

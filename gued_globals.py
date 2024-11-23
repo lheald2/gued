@@ -1,7 +1,5 @@
-"""Python file for establishing global variables that change from experiment to experiment. Each global variable should be notated with 
-all caps."""
 ### Global Variables for LUED data set
-
+PATH_SEPARATOR = '\\' # input how folders are separator in the file path
 # Variable for reading files
 SEPARATORS = '_'
 
@@ -9,7 +7,7 @@ SEPARATORS = '_'
 CENTER_GUESS = (465, 475)
 RADIUS_GUESS = 35
 DISK_RADIUS = 3
-THRESHOLD = 3100
+THRESHOLD = 5000
 
 # Variable for Generating Background
 CORNER_RADIUS = 20
@@ -33,5 +31,6 @@ FIGSIZE = (12,4)
 
 # Path for Theory Package
 
-PATH_DCS = '\\packages\\dcs_repositiory\\3.7MeV\\'
+PATH_DCS = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\Coding Lab Notebook\\gued_package\\GUED_Analysis\\packages\\dcs_repositiory\\3.7MeV\\'
+#path_dcs = '/sdf/home/l/lheald2/GUED/jupyter_notebook/user_notebooks/dcs_repository/3.7MeV/ding Lab Notebook\\gued_package\\GUED_Analysis\\packages\\dcs_repositiory\\3.7MeV\\'
 #path_dcs = '/sdf/home/l/lheald2/GUED/jupyter_notebook/user_notebooks/dcs_repository/3.7MeV/
