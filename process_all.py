@@ -10,8 +10,8 @@ from scipy.signal import savgol_filter
 import gued
 
 if __name__ == "__main__":
-    data_path = "C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\LUED_Data\\20240829_0638\\"
-    run_path = "*\\ANDOR1_*.tif"
+    data_path = "/work/centurion/lheald2/20240920_1422/20240920_1422/"
+    run_path = "*/ANDOR1_*.tif"
         
     #bkg_path = '/work/centurion/shared/UED_data/FY18_o-nitrophenol/20180823/Background/*/*/ANDOR1_*.tif'
 
@@ -23,21 +23,43 @@ if __name__ == "__main__":
     print(f"{len(files)} found in {full_path} folders")
 
     print('Loading diffraction signal')
-    all_data, all_stages, all_orders, all_counts = gued.get_image_details(files, sort=True, filter_data=[0,601], plot=False)
+    all_data, all_stages, all_orders, all_counts = gued.get_image_details(files, sort=True, filter_data=False, plot=False)
+    
+    counts_mean = np.mean(all_counts)        # Mean values of Total Counts of all images
+    counts_std  = np.std(all_counts)         # the STD of all the tc for all the iamges
+    uni_stage = np.unique(all_stages)# Pump-probe stage position
+    
+    #print(f"Filtering based on counts for files {groups[i]} to {groups[i+1]}")
+    all_data, all_stages, all_orders, all_counts = gued.remove_counts(all_data, all_stages, all_orders, 
+                                                                         all_counts, added_range=[], plot=False)
+    
+    # Adding Range to cut data down to help with handling and speed 
+    min_idx = 1000
+    max_idx = 2000
+    
+    if max_idx > len(all_data):
+        max_idx = len(all_data)
 
-    exp_label = "LUED"
+    all_data = all_data[min_idx: max_idx]
+    all_stages = all_stages[min_idx: max_idx]
+    all_orders = all_orders[min_idx: max_idx]
+    all_counts = all_counts[min_idx: max_idx]
+    
+    exp_label = "LUED_new"
     today = date.today()
     print(today)
 
-    file_path = "C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\LUED_Data\\"
+    file_path = "/work/centurion/lheald2/20240920_1422/"
     file_name = file_path + f"{exp_label}_{today}.h5"
     print(f"writing data to {file_name}")
-    group_name = "CHBr3"
+    group_name = "Propanol"
     #group_name = "s4"
-    save_factor = 0
+    save_factor = 5
 
     group_size = 200
     groups = np.arange(0, len(all_data)+1, group_size)
+    
+    smooth_centers = True
 
     start = time.perf_counter()
 
@@ -48,14 +70,6 @@ if __name__ == "__main__":
         stage_positions = all_stages[groups[i]:groups[i+1]]
         file_numbers = all_orders[groups[i]:groups[i+1]]
         counts = all_counts[groups[i]:groups[i+1]]
-
-        counts_mean = np.mean(counts)        # Mean values of Total Counts of all images
-        counts_std  = np.std(counts)         # the STD of all the tc for all the iamges
-        uni_stage = np.unique(stage_positions)# Pump-probe stage position
-
-        #print(f"Filtering based on counts for files {groups[i]} to {groups[i+1]}")
-        data_array, stage_positions, file_order, counts = gued.remove_counts(data_array, stage_positions, file_numbers, 
-                                                                             counts, added_range=[], plot=False)
 
         #print(f"Removing background for files {groups[i]} to {groups[i+1]}")
         data_array = gued.remove_background_pool(data_array, remove_noise=True, plot=False)
@@ -70,6 +84,7 @@ if __name__ == "__main__":
         center_x, center_y = gued.find_center_pool(data_array, plot=False)
         centers = list(zip(center_x, center_y))
         average_center = np.mean(centers, axis=0)
+        #centers = average_center
         #average_center = [455, 460]
         print(f"Average center of data set {i} is ({average_center[0]:.2f}, {average_center[1]:.2f})")
 
@@ -82,7 +97,7 @@ if __name__ == "__main__":
         # data_array = clean_data
         # del clean_data
 
-        print(f"Saving Data for files {groups[i]} to {groups[i+1]} as run number {i}")
+        print(f"Saving Data for files {groups[i]} to {groups[i+1]} as run number {i+save_factor}")
         # Make dictionary for saving to h5 file
 
         data_dictionary = {
@@ -94,7 +109,7 @@ if __name__ == "__main__":
         
         data_note = "Testing new processing with smoothed centers"
         gued.save_data(file_name, group_name, (i+save_factor), data_dictionary, group_note=data_note)
-        del data_array, stage_positions, file_numbers, counts, counts_mean, counts_std
+        del data_array, stage_positions, file_numbers, counts
 
     stop = time.perf_counter()
 
@@ -116,19 +131,22 @@ if __name__ == "__main__":
     window_size = 101  # Choose an odd number for the window size
     poly_order = 1  # Choose the polynomial order
 
-    if group_name == "s1":
-        smoothed_x = np.concatenate((savgol_filter(centers_x[:1440], window_size, poly_order),
-                                    savgol_filter(centers_x[1441:1505], 35, poly_order), 
-                                    savgol_filter(centers_x[1505:], window_size, poly_order)))
+    if smooth_centers == True:
+        if group_name == "s1":
+            smoothed_x = np.concatenate((savgol_filter(centers_x[:1440], window_size, poly_order),
+                                        savgol_filter(centers_x[1441:1505], 35, poly_order), 
+                                        savgol_filter(centers_x[1505:], window_size, poly_order)))
 
-        smoothed_y = np.concatenate((savgol_filter(centers_y[:990], window_size, poly_order),
-                                    savgol_filter(centers_y[991:1627], window_size, poly_order), 
-                                    savgol_filter(centers_y[1627:], window_size, poly_order)))
-        smoothed_centers = list(zip(smoothed_x, smoothed_y))
+            smoothed_y = np.concatenate((savgol_filter(centers_y[:990], window_size, poly_order),
+                                        savgol_filter(centers_y[991:1627], window_size, poly_order), 
+                                        savgol_filter(centers_y[1627:], window_size, poly_order)))
+            smoothed_centers = list(zip(smoothed_x, smoothed_y))
+        else:
+            smoothed_x = savgol_filter(centers_x, window_size, poly_order)
+            smoothed_y = savgol_filter(centers_y, window_size, poly_order)
+            smoothed_centers = list(zip(smoothed_x, smoothed_y))
     else:
-        smoothed_x = savgol_filter(centers_x, window_size, poly_order)
-        smoothed_y = savgol_filter(centers_y, window_size, poly_order)
-        smoothed_centers = list(zip(smoothed_x, smoothed_y))
+        smoothed_centers = np.array(combined_data['centers'])
 
     for i in range(len(groups)-1):
         data_array = combined_data["clean_images"][groups[i]:groups[i+1]]
