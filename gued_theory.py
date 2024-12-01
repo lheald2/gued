@@ -320,7 +320,7 @@ def load_freq_xyz(path_mol, mol_name, file_type):
 
     RETURNS:
 
-    re (array):
+    coor (array):
         array of atom symbol, x, y, z, and atom number for each time step
     atom_sum (int):
         total number of atoms in the molecule
@@ -334,7 +334,7 @@ def load_freq_xyz(path_mol, mol_name, file_type):
     text = file.readlines()
     file.close()
     count = len(text)
-    re = []
+    coor = []
 
     atom_sum = list(map(int, text[0].split()))
     atom_sum = atom_sum[0]
@@ -359,11 +359,11 @@ def load_freq_xyz(path_mol, mol_name, file_type):
             info = string[0:4] + [str(atom_num)]
             temp.append(info)
             # print(string)
-        re.append(temp)
+        coor.append(temp)
 
-    re = np.array(re)
+    coor = np.array(coor)
 
-    return re, atom_sum, time
+    return coor, atom_sum, time
 
 
 def load_traj_xyz(path_mol, mol_name, file_type):
@@ -417,6 +417,59 @@ def load_traj_xyz(path_mol, mol_name, file_type):
 
     coordinates = np.array(coordinates)
     return coordinates
+
+
+def load_hot_xyz(path_mol, mol_name, file_type):
+    """
+    Reads in a frequency trajectory .xyz file containing many structures which evolve over time generated from programs such as Gaussian or
+    ORCA. The file also contains information on the time points for each structural evolution.
+
+    ARGUMENTS:
+
+    path_mol (string):
+        path to the directory of the molecular structure
+    mol_name (string):
+        file name of the structural file used for the simulation
+    file_type (string):
+        either xyz or csv depending on what the file being used is.
+
+    RETURNS:
+
+    coor (array):
+        array of atom symbol, x, y, z, and atom number for each time step
+    atom_sum (int):
+        total number of atoms in the molecule
+    time (array):
+        time points corresponding to the simulation in fs
+    """
+
+    filename = path_mol + mol_name + file_type
+    xyz_file = filename
+    file = open(xyz_file, 'r')
+    text = file.readlines()
+    file.close()
+    count = len(text)
+    coor = []
+
+    atom_sum = list(map(int, text[0].split()))
+    atom_sum = atom_sum[0]
+    iteration = atom_sum + 2
+
+    groups = np.arange(0, count, (iteration))
+    #print(len(groups))
+    for j in range(len(groups)):
+        temp = []
+        lines = np.arange(groups[j] + 2, groups[j] + iteration)
+        for line in lines:
+            string = list(map(str, text[line].split()))
+            atom_num = sym_to_no(string[0])
+            info = string[0:4] + [str(atom_num)]
+            temp.append(info)
+        coor.append(temp)
+
+    coor = np.array(coor)
+
+    return coor, atom_sum
 
 
 def _get_modified_coor(coor, atom_sum):
@@ -728,7 +781,7 @@ def load_time_evolving_xyz(path_mol, mol_name, file_type):
 
     time_count = int((len(a0) - 1) / (atom_sum + 2))  # find how many time points are there in the time evolution file
     time = [0 for i in range(time_count)]
-    print("count = ", time_count)
+    #print("count = ", time_count)
 
     coor_txyz = get_3d_matrix(time_count, atom_sum, 4)
     # coor_txyz[time order number][atom type][coordinate xyz]
@@ -756,7 +809,7 @@ def load_time_evolving_xyz(path_mol, mol_name, file_type):
             o = 0
             n += 1
         n = 0
-    print(len(coor_txyz[0][0]))
+    #print(len(coor_txyz[0][0]))
     for i in range(time_count):
         coor1 = _get_modified_coor(coor_txyz[i][:][:], atom_sum)
         coor_txyz[i] = coor1
