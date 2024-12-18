@@ -18,7 +18,6 @@ import matplotlib.pyplot as plt
 import matplotlib
 import pandas as pd
 from scipy import signal
-from scipy.interpolate import PchipInterpolator
 from scipy.ndimage import median_filter
 import concurrent.futures
 from functools import partial
