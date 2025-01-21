@@ -92,17 +92,17 @@ import h5py
 
 
 # Define saving details
-file_label = "NB_Trajectories"
+file_label = "QC_Trajectories"
 today = date.today()
 print(today)
 
 file_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\QC data and code\\Theory Structures\\'
-file_name = file_path + f"{file_label}_{today}.h5"
+file_name = file_path + f"{file_label}_{today}_xray.h5"
 print(f"writing data to {file_name}")
 group_name = "s4"
 
 # Define the folder path to the trajectory files
-path_traj = "C:/Users/laure/OneDrive - University of Nebraska-Lincoln/Documents/Centurion Lab/QC data and code/Theory Structures/NB/Singlet_4/*/"
+path_traj = "C:/Users/laure/OneDrive - University of Nebraska-Lincoln/Documents/Centurion Lab/QC data and code/Theory Structures/QC/Singlet_4/*/"
 traj_folder = glob.glob(path_traj)
 # sort the folder names in order of trajectory number
 
@@ -114,11 +114,11 @@ file_type = ".xyz"
 
 for folder in traj_folder:
     print(f"getting trajectory for {folder[-6:-2]}")
-    dI_I_raw, dI_I_conv, s, t_fs = gt.trajectory_sim(folder, mol_name, file_type, return_data=True)
+    dI_I_raw, dI_I_conv, s, t_fs = gt.trajectory_sim_xray(folder, mol_name, file_type, return_data=True)
     data_dictionary = {"dI_I_raw": dI_I_raw, "dI_I_conv":dI_I_conv, "s": s, "time": t_fs}
     gt.save_data(file_name, group_name, folder[-6:-2], data_dictionary)
 
 stop = time.perf_counter()
-print(f"Finished processing {len(traj_folder)} trajectories in {(stop-start)/60} minutes")
+print(f"Finished processing {len(traj_folder)} trajectories in {((stop-start)/60):.2f} minutes")
 
 
