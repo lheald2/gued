@@ -519,7 +519,7 @@ def add_detector_mask(data_array, mask, fill_value = np.nan, plot=False):
 
     if plot==True:
         test = masked_data[0]
-        plt.figure(figsize=(14,8))
+        plt.figure(figsize=FIGSIZE)
         plt.subplot(1, 3, 1)
         plt.imshow(test, cmap='jet')
         plt.xlabel('Pixel')
@@ -599,7 +599,7 @@ def remove_counts(data_array, stage_positions, file_order, counts, added_range =
     print(init_length - len(new_counts), " number of files removed from ", init_length, " initial files")
 
     if plot == True:
-        plt.figure(figsize=(12, 4))  # Plot counts rate, images number at each posi, and bad images
+        plt.figure(figsize=FIGSIZE)  # Plot counts rate, images number at each posi, and bad images
 
         plt.plot(new_counts, '-d')
         plt.axhline(y=counts_mean, color='k', linestyle='-', linewidth=1, label="mean counts")
@@ -815,6 +815,8 @@ def remove_background_pool(data_array, remove_noise=True, plot=False):
         axes[2].set_xlabel('X-position')
         axes[2].set_ylabel('Y-position')
         colorbar3 = fig.colorbar(img3, ax=axes[2])  # Add colorbar to the third subplot
+
+        fig.tight_layout()
     if remove_noise == True:
         return clean_data
     else:
@@ -1005,11 +1007,11 @@ def subtract_background(data_array, mean_background, plot=True):
     if plot == True:
         plt.figure(figsize=FIGSIZE)
         plt.subplot(1, 2, 1)
-        plt.imshow(data_array[0])
+        plt.imshow(np.log(data_array[0]))
         plt.title("Original Image")
 
         plt.subplot(1, 2, 2)
-        plt.imshow(clean_data[0])
+        plt.imshow(np.log(clean_data[0]))
         plt.title("Cleaned Image")
         plt.tight_layout()
         plt.show()
@@ -1041,7 +1043,7 @@ def remove_based_on_center(centers, data_array, stage_positions, std_factor=2, p
     print(init_length - len(new_array), " number of files removed from ", init_length, " initial files")
 
     if plot:
-        plt.figure(figsize=(12, 4))
+        plt.figure(figsize=FIGSIZE)
 
         plt.subplot(1, 2, 1)
         plt.plot(new_centers[:, 0], '-d', label='New Centers')
@@ -1438,7 +1440,7 @@ def find_center_pool(data_array, plot=True, print_stats=False):
     radii = np.array(radii)
     thresholds = np.array(thresholds)
     if plot == True:
-        plt.figure(figsize=(12, 6))
+        plt.figure(figsize=FIGSIZE)
         plt.subplot(2, 2, 1)
         plt.plot(center_x[:])
         plt.title("X values for Centers")
@@ -1737,11 +1739,15 @@ def median_filter_pool(data_array, centers, plot=True):
 
     if plot == True:
         plt.figure(figsize=FIGSIZE)
-        plt.subplot(1,2,1)
+        plt.subplot(1,3,1)
         plt.imshow(data_array[0])
         plt.title("Original Image")
+
+        plt.subplot(1,3,2)
+        plt.imshow(filled_data[0])
+        plt.title("Interpolated Image")
         
-        plt.subplot(1,2,2)
+        plt.subplot(1,3,3)
         plt.imshow(filtered_data[0])
         plt.title("Filtered Image")
         plt.show()
@@ -1883,6 +1889,7 @@ def get_azimuthal_average_pool(data_array, centers, normalize=False, plot=False,
         plt.subplot(1,3,3)
         plt.plot(norm_factors)
         plt.title("Normalization Factors")
+        plt.tight_layout()
         plt.show()
     
     if return_info == True:
@@ -2015,7 +2022,7 @@ def poly_fit(data_array, x_vals, degree = 2, plot=True, return_baseline=False):
         print("Data Array must be 1D or 2D array")
 
     if plot == True:
-        plt.figure()
+        plt.figure(figsize=FIGSIZE)
         plt.subplot(1,2,1)
         plt.plot(data_array[1])
         plt.plot(baseline2d[1])
@@ -2082,7 +2089,7 @@ def bandpass_filter(data_array, ds, min_freq=0.001, max_freq=5, order = 4, plot=
         print(filtered_data)
 
         if plot == True:
-            plt.figure()
+            plt.figure(figsize=FIGSIZE)
             plt.subplot(2,1,1)
             plt.plot(data_array[1])
             plt.title("Original Data")
@@ -2097,7 +2104,7 @@ def bandpass_filter(data_array, ds, min_freq=0.001, max_freq=5, order = 4, plot=
         filtered_data = signal.filtfilt(b, a, data_array)
 
         if plot == True:
-            plt.figure()
+            plt.figure(figsize=FIGSIZE)
             plt.subplot(2,1,1)
             plt.plot(data_array)
             plt.title("Original Data")

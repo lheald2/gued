@@ -24,7 +24,7 @@ from gued_globals import *
 #Contact: lheald2@unl.edu, ckk20@mails.tsinghua.edu.cn
 # Path for Theory Package
 
-PATH_DCS = 'packages\\dcs_repositiory\\3.7MeV\\'
+
 #path_dcs = '/sdf/home/l/lheald2/GUED/jupyter_notebook/user_notebooks/dcs_repository/3.7MeV/'
 TABLE = pd.read_csv(PATH_DCS+'Periodic_Table.csv')
 angs = '\u00C5' 
