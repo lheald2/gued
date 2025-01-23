@@ -10,7 +10,7 @@ SEPARATORS = '_' # underscore or dash usually, based on how the files are named
 CENTER_GUESS = (465, 475)
 RADIUS_GUESS = 35
 DISK_RADIUS = 3 
-THRESHOLD = 3000
+THRESHOLD = 0
 
 # Variable for Generating Background
 CORNER_RADIUS = 20
@@ -32,4 +32,4 @@ MAX_PROCESSORS = 8
 FIGSIZE = (10,4)
 
 # Path for Theory Package
-PATH_DCS = '/sdf/home/l/lheald2/GUED/gued/packages/dcs_repositiory/3.7MeV/'
+PATH_DCS = '/packages/dcs_repositiory/3.7MeV/'

@@ -10,8 +10,8 @@ from scipy.signal import savgol_filter
 import gued
 
 if __name__ == "__main__":
-    data_path = "/work/centurion/lheald2/20240920_1422/20240920_1422/"
-    run_path = "*/ANDOR1_*.tif"
+    data_path = "/sdf/data/lcls/ds/ued_testfac/scratch/gued_online_analysis/gued_demo_data/20201027/Run/20201027_1944/"
+    run_path = "*/*/ANDOR1_*.tif"
         
     #bkg_path = '/work/centurion/shared/UED_data/FY18_o-nitrophenol/20180823/Background/*/*/ANDOR1_*.tif'
 
@@ -34,7 +34,7 @@ if __name__ == "__main__":
                                                                          all_counts, added_range=[], plot=False)
     
     # Adding Range to cut data down to help with handling and speed 
-    min_idx = 1000
+    min_idx = 0
     max_idx = 2000
     
     if max_idx > len(all_data):
@@ -45,16 +45,15 @@ if __name__ == "__main__":
     all_orders = all_orders[min_idx: max_idx]
     all_counts = all_counts[min_idx: max_idx]
     
-    exp_label = "LUED_new"
+    exp_label = "test_data"
     today = date.today()
     print(today)
 
-    file_path = "/work/centurion/lheald2/20240920_1422/"
+    file_path = "/sdf/scratch/users/l/lheald2/ued_postprocess/"
     file_name = file_path + f"{exp_label}_{today}.h5"
     print(f"writing data to {file_name}")
-    group_name = "Propanol"
-    #group_name = "s4"
-    save_factor = 5
+    group_name = "test_set"
+    save_factor = 1
 
     group_size = 200
     groups = np.arange(0, len(all_data)+1, group_size)
