@@ -10,7 +10,7 @@ SEPARATORS = '_' # underscore or dash usually, based on how the files are named
 CENTER_GUESS = (465, 475)
 RADIUS_GUESS = 35
 DISK_RADIUS = 3 
-THRESHOLD = 0
+THRESHOLD = 1000
 
 # Variable for Generating Background
 CORNER_RADIUS = 20
