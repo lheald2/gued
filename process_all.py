@@ -10,8 +10,7 @@ from scipy.signal import savgol_filter
 import gued
 
 if __name__ == "__main__":
-    data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\Run\\*\\'
-    #data_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180623\\Run_01\\'
+    data_path = "C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\QC data and code\\20200911_1229\\"
     run_path = "*\\*\\ANDOR1_*.tif"
     
     #bkg_path = '/work/centurion/shared/UED_data/FY18_o-nitrophenol/20180823/Background/*/*/ANDOR1_*.tif'
@@ -26,14 +25,14 @@ if __name__ == "__main__":
     print('Loading diffraction signal')
     all_data, all_stages, all_orders, all_counts = gued.get_image_details(files, sort=True, filter_data=False, plot=False)
 
-    exp_label = "o-ntph_data"
+    exp_label = "QC"
     today = date.today()
     print(today)
 
-    file_path = "C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\nitrophenyl code\\20180823\\"
+    file_path = "D:\\ueduu3102-Centurion\\post_process\\"
     file_name = file_path + f"{exp_label}_{today}.h5"
     print(f"writing data to {file_name}")
-    group_name = "s1"
+    group_name = "long_delay"
     #group_name = "s4"
     save_factor = 0
 

@@ -1,7 +1,7 @@
-### Global Variables for IR CF3I data set
+### Global Variables for s1 data set
 
 # Variable for reading files
-SEPARATORS = ['-', '_']
+SEPARATORS = '_'
 
 # Variables for Center Finding Algorithm
 CENTER_GUESS = (465, 475)
@@ -14,12 +14,14 @@ CORNER_RADIUS = 20
 CHECK_NUMBER = 50
 
 # Variables for Masking
-MASK_CENTER = [545, 495]
-MASK_RADIUS = 45
+MASK_CENTER = [525, 520]
+MASK_RADIUS = 50
 ADDED_MASK = []
-# Rectangular Mask Details. If not needed just ignore
-REC_LENGTH = 535 # start position of rectangle within the image
-REC_EXTENT = (540, 30) # (length, width) # Use () not []
+# ADDED_MASK = [
+#     [432, 464, 16],
+#     [445, 440, 35], 
+#     [471, 427, 22],
+#     [476, 482, 35]]
 
 # Used throughout code as the threshold for cutting out date. This is the default value but other values can be set for the functions using
 # std_factor = 4

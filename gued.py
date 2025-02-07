@@ -168,8 +168,10 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
                     string = list(
                         map(str, file.split("\\")))  # Note standard slash usage for windows todo might need to test
                     folder_number = string[-3][-3:]
+                    #print(folder_number)
                     string = list(map(str, string[-1].split(SEPARATORS[0])))
-                    file_number = int(folder_number + string[1])
+                    print(folder_number + string[2])
+                    file_number = int(folder_number + string[2])
                     file_order.append(int(file_number))
                     string = list(map(str, string[-1].split(SEPARATORS[1])))
                     stage_positions.append(float(string[0]))
