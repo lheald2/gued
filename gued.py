@@ -18,7 +18,6 @@ import matplotlib.pyplot as plt
 import matplotlib
 import pandas as pd
 from scipy import signal
-from scipy.interpolate import PchipInterpolator
 from scipy.ndimage import median_filter
 import concurrent.futures
 from functools import partial
@@ -166,7 +165,7 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
                 # stage_pos = np.array(stage_pos)
                 for file in file_names:
                     string = list(
-                        map(str, file.split("\\")))  # Note standard slash usage for windows todo might need to test
+                        map(str, file.split(PATH_SEPARATOR)))  # Note standard slash usage for windows todo might need to test
                     folder_number = string[-3][-3:]
                     #print(folder_number)
                     string = list(map(str, string[-1].split(SEPARATORS[0])))
@@ -189,7 +188,7 @@ def get_image_details(file_names, sort=True, filter_data=False, plot=False):
                 # stage_pos = [np.float64(file_name[idx_start:idx_end]) for file_name in file_names]
                 # stage_pos = np.array(stage_pos)
                 for file in file_names:
-                    string = list(map(str, file.split("\\")))
+                    string = list(map(str, file.split(PATH_SEPARATOR)))
                     string = list(map(str, string[-1].split(SEPARATORS)))
                     file_order.append(int(string[2]))
                     stage_positions.append(float(string[3]))
@@ -522,7 +521,7 @@ def add_detector_mask(data_array, mask, fill_value = np.nan, plot=False):
 
     if plot==True:
         test = masked_data[0]
-        plt.figure(figsize=(14,8))
+        plt.figure(figsize=FIGSIZE)
         plt.subplot(1, 3, 1)
         plt.imshow(test, cmap='jet')
         plt.xlabel('Pixel')
@@ -602,7 +601,7 @@ def remove_counts(data_array, stage_positions, file_order, counts, added_range =
     print(init_length - len(new_counts), " number of files removed from ", init_length, " initial files")
 
     if plot == True:
-        plt.figure(figsize=(12, 4))  # Plot counts rate, images number at each posi, and bad images
+        plt.figure(figsize=FIGSIZE)  # Plot counts rate, images number at each posi, and bad images
 
         plt.plot(new_counts, '-d')
         plt.axhline(y=counts_mean, color='k', linestyle='-', linewidth=1, label="mean counts")
@@ -818,6 +817,8 @@ def remove_background_pool(data_array, remove_noise=True, plot=False):
         axes[2].set_xlabel('X-position')
         axes[2].set_ylabel('Y-position')
         colorbar3 = fig.colorbar(img3, ax=axes[2])  # Add colorbar to the third subplot
+
+        fig.tight_layout()
     if remove_noise == True:
         return clean_data
     else:
@@ -1008,11 +1009,11 @@ def subtract_background(data_array, mean_background, plot=True):
     if plot == True:
         plt.figure(figsize=FIGSIZE)
         plt.subplot(1, 2, 1)
-        plt.imshow(data_array[0])
+        plt.imshow(np.log(data_array[0]))
         plt.title("Original Image")
 
         plt.subplot(1, 2, 2)
-        plt.imshow(clean_data[0])
+        plt.imshow(np.log(clean_data[0]))
         plt.title("Cleaned Image")
         plt.tight_layout()
         plt.show()
@@ -1044,7 +1045,7 @@ def remove_based_on_center(centers, data_array, stage_positions, std_factor=2, p
     print(init_length - len(new_array), " number of files removed from ", init_length, " initial files")
 
     if plot:
-        plt.figure(figsize=(12, 4))
+        plt.figure(figsize=FIGSIZE)
 
         plt.subplot(1, 2, 1)
         plt.plot(new_centers[:, 0], '-d', label='New Centers')
@@ -1441,7 +1442,7 @@ def find_center_pool(data_array, plot=True, print_stats=False):
     radii = np.array(radii)
     thresholds = np.array(thresholds)
     if plot == True:
-        plt.figure(figsize=(12, 6))
+        plt.figure(figsize=FIGSIZE)
         plt.subplot(2, 2, 1)
         plt.plot(center_x[:])
         plt.title("X values for Centers")
@@ -1655,7 +1656,7 @@ def fill_missing(center, image):
 
     # Part 2: Fill missing values from index 400 onwards using 'nearest' interpolation
     azi_fill[400:] = pd.Series(azi_fill[400:]).interpolate(method='nearest').to_numpy()
-    print(azi_fill.shape)
+    #print(azi_fill.shape)
     new_image = np.copy(image)
 
     for i in range(xlength):
@@ -1671,7 +1672,6 @@ def fill_missing(center, image):
         new_image[rmat==int(i+1)] = np.copy(roi)
         
     return new_image
-
 
 
 def _median_filter(image, kernel_size = 5):
@@ -1741,11 +1741,15 @@ def median_filter_pool(data_array, centers, plot=True):
 
     if plot == True:
         plt.figure(figsize=FIGSIZE)
-        plt.subplot(1,2,1)
+        plt.subplot(1,3,1)
         plt.imshow(data_array[0])
         plt.title("Original Image")
+
+        plt.subplot(1,3,2)
+        plt.imshow(filled_data[0])
+        plt.title("Interpolated Image")
         
-        plt.subplot(1,2,2)
+        plt.subplot(1,3,3)
         plt.imshow(filtered_data[0])
         plt.title("Filtered Image")
         plt.show()
@@ -1887,6 +1891,10 @@ def get_azimuthal_average_pool(data_array, centers, normalize=False, plot=False,
         plt.subplot(1,3,3)
         plt.plot(norm_factors)
         plt.title("Normalization Factors")
+<<<<<<< HEAD
+=======
+        plt.tight_layout()
+>>>>>>> main
         plt.show()
     
     if return_info == True:
@@ -2019,7 +2027,7 @@ def poly_fit(data_array, x_vals, degree = 2, plot=True, return_baseline=False):
         print("Data Array must be 1D or 2D array")
 
     if plot == True:
-        plt.figure()
+        plt.figure(figsize=FIGSIZE)
         plt.subplot(1,2,1)
         plt.plot(data_array[1])
         plt.plot(baseline2d[1])
@@ -2086,7 +2094,7 @@ def bandpass_filter(data_array, ds, min_freq=0.001, max_freq=5, order = 4, plot=
         print(filtered_data)
 
         if plot == True:
-            plt.figure()
+            plt.figure(figsize=FIGSIZE)
             plt.subplot(2,1,1)
             plt.plot(data_array[1])
             plt.title("Original Data")
@@ -2101,7 +2109,7 @@ def bandpass_filter(data_array, ds, min_freq=0.001, max_freq=5, order = 4, plot=
         filtered_data = signal.filtfilt(b, a, data_array)
 
         if plot == True:
-            plt.figure()
+            plt.figure(figsize=FIGSIZE)
             plt.subplot(2,1,1)
             plt.plot(data_array)
             plt.title("Original Data")
@@ -2310,5 +2318,33 @@ def inspect_h5(file_name):
         f.close()
 
         
+def clean_h5(file_name, group_name, key_to_delete):
+    """Removes variables from an h5 file based on a string keyword
+    
+    ARGUMENTS:
+    
+    file_name (str):
+        file name or path that holds the data of interest
+    group_name (str):
+        group subset within the file
+    key_to_delete(str):
+        key related to variable being removed
 
+    """
+    
+    with h5py.File(file_name, "a") as h5_file:
+
+        if group_name in h5_file:
+            group = h5_file[group_name]
+
+            # Collect dataset names that contain "clean_images"
+            datasets_to_remove = [key for key in group.keys() if key_to_delete in key]
+
+            # Remove the matching datasets
+            for dataset in datasets_to_remove:
+                del group[dataset]
+                print(f"Deleted dataset: {group_name}/{dataset}")
+
+        else:
+            print(f"Group '{group_name}' not found in the file.")
 

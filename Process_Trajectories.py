@@ -1,7 +1,7 @@
 """
 Python file for batch processing trajectory xyz files into dI/I and s ranges that can be used later. dI/I and s matrices are saved to an .h5 file
 with the relevant information about the trajectory in the data naming scheme. This code uses the gued_theory.py package, specifically the 
-gued_theory.trajectory_sim() function.
+gued_theory.trajectory_sim() function. In deveopment.
 """
 
 
