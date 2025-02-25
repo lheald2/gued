@@ -1,13 +1,13 @@
-"""Code written by Lauren F. Heald with support from Caidan Moore, Cuong Le, and Yusong Liu. Intended to be used for processing ultrafast 
-gas phase electron diffraction data collected at the MeV-UED hutch of LCLS at the Stanford Linear Accelerator National Laboratory. 
+# """Code written by Lauren F. Heald with support from Caidan Moore, Cuong Le, and Yusong Liu. Intended to be used for processing ultrafast 
+# gas phase electron diffraction data collected at the MeV-UED hutch of LCLS at the Stanford Linear Accelerator National Laboratory. 
 
-Questions or Concerns: 
-    email: lheald2@unl.edu
+# Questions or Concerns: 
+#     email: lheald2@unl.edu
 
-Affiliations:
-    Centurion Lab at the University of Nebraska -- Lincoln, NE
-    Stanford Linear Accelerator National Lab -- Menlo Park, CA
-"""
+# Affiliations:
+#     Centurion Lab at the University of Nebraska -- Lincoln, NE
+#     Stanford Linear Accelerator National Lab -- Menlo Park, CA
+# """
 
 
 # Standard Packages
@@ -1891,10 +1891,7 @@ def get_azimuthal_average_pool(data_array, centers, normalize=False, plot=False,
         plt.subplot(1,3,3)
         plt.plot(norm_factors)
         plt.title("Normalization Factors")
-<<<<<<< HEAD
-=======
         plt.tight_layout()
->>>>>>> main
         plt.show()
     
     if return_info == True:

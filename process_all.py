@@ -10,15 +10,9 @@ from scipy.signal import savgol_filter
 import gued
 
 if __name__ == "__main__":
-<<<<<<< HEAD
     data_path = "C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\QC data and code\\20200911_1229\\"
     run_path = "*\\*\\ANDOR1_*.tif"
     
-=======
-    data_path = "/sdf/data/lcls/ds/ued_testfac/scratch/gued_online_analysis/gued_demo_data/20201027/Run/20201027_1944/"
-    run_path = "*/*/ANDOR1_*.tif"
-        
->>>>>>> main
     #bkg_path = '/work/centurion/shared/UED_data/FY18_o-nitrophenol/20180823/Background/*/*/ANDOR1_*.tif'
 
 
@@ -46,33 +40,16 @@ if __name__ == "__main__":
     if max_idx > len(all_data):
         max_idx = len(all_data)
 
-<<<<<<< HEAD
     exp_label = "QC"
     today = date.today()
     print(today)
 
-    file_path = "D:\\ueduu3102-Centurion\\post_process\\"
+    file_path = data_path
     file_name = file_path + f"{exp_label}_{today}.h5"
     print(f"writing data to {file_name}")
     group_name = "long_delay"
     #group_name = "s4"
     save_factor = 0
-=======
-    all_data = all_data[min_idx: max_idx]
-    all_stages = all_stages[min_idx: max_idx]
-    all_orders = all_orders[min_idx: max_idx]
-    all_counts = all_counts[min_idx: max_idx]
-    
-    exp_label = "test_data"
-    today = date.today()
-    print(today)
-
-    file_path = "/sdf/scratch/users/l/lheald2/ued_postprocess/"
-    file_name = file_path + f"{exp_label}_{today}.h5"
-    print(f"writing data to {file_name}")
-    group_name = "test_set"
-    save_factor = 1
->>>>>>> main
 
     group_size = 200
     groups = np.arange(0, len(all_data)+1, group_size)
