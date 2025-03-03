@@ -1290,7 +1290,6 @@ def fit_high_s(data_array, x_vals, s_range=300, return_baseline=False, plot=Fals
     baseline (array):
         calculated baselines. Only returned when return_baseline==True"""
 
-    data_fix = data_array
     if len(data_array.shape) == 2:
         corrected_data = []
         baseline = []
@@ -1298,14 +1297,18 @@ def fit_high_s(data_array, x_vals, s_range=300, return_baseline=False, plot=Fals
             temp_data = data_array[i]
             coeff = np.polyfit(x_vals[s_range:], temp_data[s_range:], 1)
             line = np.polyval(coeff, x_vals[:])
+            line = np.polyval(coeff, x_vals[:])
             baseline.append(line)
             data_fix[i, :] = temp_data[:] - line
             corrected_data.append(data_fix[i])
+            data_fix = temp_data - line
+            corrected_data.append(data_fix)
         
         if plot==True:
             plt.figure()
             plt.subplot(2,1,1)
             plt.plot(x_vals, data_array[0])
+            plt.plot(x_vals, baseline[0])
             plt.plot(x_vals, baseline[0])
             plt.title("Original Data with calculated Baseline")
             
@@ -1319,12 +1322,15 @@ def fit_high_s(data_array, x_vals, s_range=300, return_baseline=False, plot=Fals
         coeff = np.polyfit(x_vals[s_range:], data_array[s_range:], 1)
         baseline = np.polyval(coeff, x_vals[:])
         data_fix[:] = data_array[:] - baseline
+        baseline = np.polyval(coeff, x_vals[:])
+        data_fix = data_array - baseline
         corrected_data = data_fix
     
         if plot==True:
             plt.figure()
             plt.subplot(2,1,1)
             plt.plot(x_vals, data_array)
+            plt.plot(x_vals, baseline)
             plt.plot(x_vals, baseline)
             plt.title("Original Data with calculated Baseline")
             
