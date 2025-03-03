@@ -92,31 +92,34 @@ import h5py
 
 
 # Define saving details
-file_label = "QC_Trajectories"
+file_label = "CHBr3_Trajectories"
 today = date.today()
 print(today)
 
-file_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\QC data and code\\Theory Structures\\'
+file_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\SLAC\\Bromoform Experiment\\'
 file_name = file_path + f"{file_label}_{today}_xray.h5"
 print(f"writing data to {file_name}")
-group_name = "s4"
+group_name = "gessner_trajs"
 
 # Define the folder path to the trajectory files
-path_traj = "C:/Users/laure/OneDrive - University of Nebraska-Lincoln/Documents/Centurion Lab/QC data and code/Theory Structures/QC/Singlet_4/*/"
-traj_folder = glob.glob(path_traj)
+path_traj = "C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\SLAC\\Bromoform Experiment\\traj_113\\"
+files = glob.glob(path_traj+"traj*")
+
 # sort the folder names in order of trajectory number
 
 
 start = time.perf_counter()
-print(f"Processing {len(traj_folder)} trajectory files.")
-mol_name = "output"
+print(f"Processing {len(files)} trajectory files.")
+
 file_type = ".xyz"
 
-for folder in traj_folder:
-    print(f"getting trajectory for {folder[-6:-2]}")
-    dI_I_raw, dI_I_conv, s, t_fs = gt.trajectory_sim_xray(folder, mol_name, file_type, return_data=True)
+for file in files:
+    string = list(map(str, file.split('\\')))
+    mol_name = string[-1][:-4]
+    #print(f"getting trajectory for {file[-6:-2]}")
+    dI_I_raw, dI_I_conv, s, t_fs = gt.trajectory_sim_xray(path_traj, mol_name, file_type, return_data=True)
     data_dictionary = {"dI_I_raw": dI_I_raw, "dI_I_conv":dI_I_conv, "s": s, "time": t_fs}
-    gt.save_data(file_name, group_name, folder[-6:-2], data_dictionary)
+    gt.save_data(file_name, group_name, string[-1][5:-4], data_dictionary)
 
 stop = time.perf_counter()
 print(f"Finished processing {len(traj_folder)} trajectories in {((stop-start)/60):.2f} minutes")

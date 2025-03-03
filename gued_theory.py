@@ -15,8 +15,8 @@ from scipy.optimize import curve_fit
 import scipy.stats
 from PIL import Image
 from matplotlib.colors import TwoSlopeNorm
-from mendeleev import element
-from colour import Color
+# from mendeleev import element
+# from colour import Color
 warnings.simplefilter("ignore")
 from gued_globals import *
 
@@ -262,43 +262,43 @@ def _load_xyz(xyz_file):
     return coordinates, atom_sum
 
 
-def get_bonds(xyz_file):
+# def get_bonds(xyz_file):
 
-    coordinates, atom_sum = _load_xyz(xyz_file)
-    atom_ids = coordinates[:,0]
-    x = coordinates[:,1].astype(float)
-    y = coordinates[:,2].astype(float)
-    z = coordinates[:,3].astype(float)
+#     coordinates, atom_sum = _load_xyz(xyz_file)
+#     atom_ids = coordinates[:,0]
+#     x = coordinates[:,1].astype(float)
+#     y = coordinates[:,2].astype(float)
+#     z = coordinates[:,3].astype(float)
 
 
-    atomic_num = []
-    radii = []
-    colors = []
+#     atomic_num = []
+#     radii = []
+#     colors = []
 
-    for ident in atom_ids:
-        elem = element(ident)
-        num = elem.atomic_number
-        atomic_num.append(num)
-        rad = elem.atomic_radius
-        radii.append(rad / 75)
-        color = elem.cpk_color
-        new = Color(color).rgb
-        colors.append(new)
+#     for ident in atom_ids:
+#         elem = element(ident)
+#         num = elem.atomic_number
+#         atomic_num.append(num)
+#         rad = elem.atomic_radius
+#         radii.append(rad / 75)
+#         color = elem.cpk_color
+#         new = Color(color).rgb
+#         colors.append(new)
 
-    connections = []
-    lengths = []
-    for i in range(0, len(atomic_num)):
-        for j in range(i+1, len(atomic_num)):
-            if i == j:
-                pass
-            bond_length = (x[i] - x[j]) ** 2 + (y[i] - y[j]) ** 2 + (z[i] - z[j]) ** 2
-            bond_length = bond_length ** 0.5
-            max_bond_length = 1.1 * (radii[i] + radii[j])
+#     connections = []
+#     lengths = []
+#     for i in range(0, len(atomic_num)):
+#         for j in range(i+1, len(atomic_num)):
+#             if i == j:
+#                 pass
+#             bond_length = (x[i] - x[j]) ** 2 + (y[i] - y[j]) ** 2 + (z[i] - z[j]) ** 2
+#             bond_length = bond_length ** 0.5
+#             max_bond_length = 1.1 * (radii[i] + radii[j])
 
-            if bond_length < max_bond_length:
-                #connections.append((atom_ids[i], atom_ids[j]))
-                print(atom_ids[i], atom_ids[j])
-                print(bond_length, max_bond_length)
+#             if bond_length < max_bond_length:
+#                 #connections.append((atom_ids[i], atom_ids[j]))
+#                 print(atom_ids[i], atom_ids[j])
+#                 print(bond_length, max_bond_length)
                 #lengths.append(bond_length)
 
     # lengths = np.array(lengths)
@@ -1297,16 +1297,16 @@ def fit_high_s(data_array, x_vals, s_range=300, return_baseline=False, plot=Fals
         for i in range(len(data_array)):
             temp_data = data_array[i]
             coeff = np.polyfit(x_vals[s_range:], temp_data[s_range:], 1)
-            line = np.polyval(coeff, x_vals[s_range:])
+            line = np.polyval(coeff, x_vals[:])
             baseline.append(line)
-            data_fix[i, s_range:] = temp_data[s_range:] - line
+            data_fix[i, :] = temp_data[:] - line
             corrected_data.append(data_fix[i])
         
         if plot==True:
             plt.figure()
             plt.subplot(2,1,1)
             plt.plot(x_vals, data_array[0])
-            plt.plot(x_vals[s_range:], baseline[0])
+            plt.plot(x_vals, baseline[0])
             plt.title("Original Data with calculated Baseline")
             
             plt.subplot(2,1,2)
@@ -1317,15 +1317,15 @@ def fit_high_s(data_array, x_vals, s_range=300, return_baseline=False, plot=Fals
             
     elif len(data_array.shape) == 1:
         coeff = np.polyfit(x_vals[s_range:], data_array[s_range:], 1)
-        baseline = np.polyval(coeff, x_vals[s_range:])
-        data_fix[s_range:] = data_array[s_range:] - baseline
+        baseline = np.polyval(coeff, x_vals[:])
+        data_fix[:] = data_array[:] - baseline
         corrected_data = data_fix
     
         if plot==True:
             plt.figure()
             plt.subplot(2,1,1)
             plt.plot(x_vals, data_array)
-            plt.plot(x_vals[s_range:], baseline)
+            plt.plot(x_vals, baseline)
             plt.title("Original Data with calculated Baseline")
             
             plt.subplot(2,1,2)
@@ -2234,7 +2234,7 @@ def dissoc_freq_sim_xray(path_mol, reactant, freq_xyz, file_type, other_xyz=None
     return dsM, pdf, np.array(r), new_time
 
 
-def trajectory_sim_xray(path_mol, mol_name, file_type, s_max=12, tstep = 0.5, plot=False, return_data=False):
+def trajectory_sim_xray(path_mol, mol_name, file_type, s_max=6, tstep = 0.5, plot=False, return_data=False):
     """ 
     Calculates the xray scattering and plots results of a trajectory simulation with a series of xyz coordinates and corresponding time steps.
     Uses the functions load_time_evolving_xyz, get_I_xray, get_2d_matrix, and plot_delay_simulation_with_conv. 
