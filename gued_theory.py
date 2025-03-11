@@ -98,7 +98,7 @@ def read_dat_dcs(atom_no):
     return data**0.5 ## returns in cm
 
 
-def sym_to_no(atom_symbol):
+def sym_to_no(atom_symbols):
     """ 
     Short cut for getting the atomic number from the atomic symbol.
     
@@ -112,13 +112,22 @@ def sym_to_no(atom_symbol):
     atom_number (int):
         atomic number
     """
-    
-    n=np.where(TABLE['Symbol']==atom_symbol)
-    atom_number = int(n[0]+1)
-    return atom_number
+    all_numbers = []
+    if isinstance(atom_symbols, str):
+        n=np.where(TABLE['Symbol']==atom_symbols)
+        atom_number = int(n[0]+1)
+        return atom_number
+    elif isinstance(atom_symbols, list):
+        for i in range(len(atom_symbols)):
+            n=np.where(TABLE["Symbol"]==atom_symbols[i])
+            all_numbers.append(int(n[0]+1))
+        return all_numbers
+    else:
+        print("Please provide a valid entry")
+        return
 
 
-def no_to_sym(atom_number):
+def no_to_sym(atom_numbers):
     """ 
     Short cut for getting the atomic symbol from the atomic number. 
     
@@ -130,9 +139,19 @@ def no_to_sym(atom_number):
     atom_symbol (string):
         atomic symbol    
     """
+    all_symbols = []
+    #print(f"format for atom numbers is {atom_numbers}")
+    if isinstance(atom_numbers, int): 
+        atom_symbol = TABLE['Symbol'][atom_numbers-1]
+        return atom_symbol
     
-    atom_symbol = TABLE['Symbol'][atom_number-1]
-    return atom_symbol
+    elif isinstance(atom_numbers, list):
+        for number in atom_numbers:
+            all_symbols.append(TABLE['Symbol'][atom_numbers[number-1]])
+        return all_symbols
+    else:
+        print("Please enter valid atomic numbers")
+        return
 
 
 def import_DCS(max_at_no=55):
@@ -262,49 +281,6 @@ def _load_xyz(xyz_file):
     return coordinates, atom_sum
 
 
-# def get_bonds(xyz_file):
-
-#     coordinates, atom_sum = _load_xyz(xyz_file)
-#     atom_ids = coordinates[:,0]
-#     x = coordinates[:,1].astype(float)
-#     y = coordinates[:,2].astype(float)
-#     z = coordinates[:,3].astype(float)
-
-
-#     atomic_num = []
-#     radii = []
-#     colors = []
-
-#     for ident in atom_ids:
-#         elem = element(ident)
-#         num = elem.atomic_number
-#         atomic_num.append(num)
-#         rad = elem.atomic_radius
-#         radii.append(rad / 75)
-#         color = elem.cpk_color
-#         new = Color(color).rgb
-#         colors.append(new)
-
-#     connections = []
-#     lengths = []
-#     for i in range(0, len(atomic_num)):
-#         for j in range(i+1, len(atomic_num)):
-#             if i == j:
-#                 pass
-#             bond_length = (x[i] - x[j]) ** 2 + (y[i] - y[j]) ** 2 + (z[i] - z[j]) ** 2
-#             bond_length = bond_length ** 0.5
-#             max_bond_length = 1.1 * (radii[i] + radii[j])
-
-#             if bond_length < max_bond_length:
-#                 #connections.append((atom_ids[i], atom_ids[j]))
-#                 print(atom_ids[i], atom_ids[j])
-#                 print(bond_length, max_bond_length)
-                #lengths.append(bond_length)
-
-    # lengths = np.array(lengths)
-    # return connections, lengths
-
-
 def load_freq_xyz(path_mol, mol_name, file_type):
     """
     Reads in a frequency trajectory .xyz file containing many structures which evolve over time generated from programs such as Gaussian or
@@ -398,6 +374,7 @@ def load_traj_xyz(path_mol, mol_name, file_type):
     file.close()
     count = len(text)
     coordinates = []
+    times = []
 
     atom_sum = list(map(int, text[0].split()))
     atom_sum = atom_sum[0]
@@ -408,6 +385,12 @@ def load_traj_xyz(path_mol, mol_name, file_type):
     for j in range(len(groups)):
         temp = []
         lines = np.arange(groups[j] + 2, groups[j] + iteration)
+        #print(text[j+1])
+        try:
+            times.append(float(text[groups[j]+1]))
+        except:
+            times.append(np.nan)
+
         for line in lines:
             string = list(map(str, text[line].split()))
             atom_num = sym_to_no(string[0])
@@ -415,9 +398,9 @@ def load_traj_xyz(path_mol, mol_name, file_type):
             temp.append(info)
             # print(string)
         coordinates.append(temp)
-
+    #print(len(times))
     coordinates = np.array(coordinates)
-    return coordinates
+    return coordinates, atom_sum, times
 
 
 def load_hot_xyz(path_mol, mol_name, file_type):
@@ -702,7 +685,7 @@ def apply_conv(matrix_before_conv,x_range,col,t_interval,nt,space_for_convol, pl
 
     #M1=np.transpose(M1)
     M1 = np.array(M1)
-    print(M1.shape)
+    #print(M1.shape)
     
     if plot == True:
         norm = TwoSlopeNorm(vmin=M1.min(),vcenter=0,vmax=M1.max())
@@ -717,6 +700,60 @@ def apply_conv(matrix_before_conv,x_range,col,t_interval,nt,space_for_convol, pl
         #plt.axhline(y=space_for_convol,linestyle='--')
         plt.grid()
     return M1
+
+
+def apply_gaussian_smoothing(matrix, step_size, fwhm=100, axis=0, extra_space=None, x_axis=None):
+    """
+    Applies Gaussian smoothing along a specified axis of a 2D matrix,
+    adding extra space at both ends to reduce edge effects and updating the x-axis accordingly.
+
+    Parameters:
+    matrix (np.ndarray): Input 2D matrix.
+    fwhm (float): Full width at half maximum of the Gaussian kernel.
+    axis (int): Axis along which to apply smoothing (0 for rows, 1 for columns).
+    extra_space (float): Extra space to add at both ends before smoothing.
+    x_axis (np.ndarray, optional): Corresponding x-axis values. If provided, it will be updated.
+    step_size (float): Time step size.
+
+    Returns:
+    tuple: (Smoothed 2D matrix with padding, Updated x-axis array if provided, otherwise None)
+    """
+    # Convert FWHM to standard deviation (sigma)
+    sigma = fwhm / (2 * np.sqrt(2 * np.log(2))) / step_size
+
+    if extra_space is None:
+        extra_space = 2*fwhm
+    
+    # Ensure input is a NumPy array
+    matrix = np.array(matrix)
+    
+    # Convert extra space in fs to number of points
+    extra_points = int(extra_space / step_size)
+    
+    # Define padding width
+    if axis == 0:
+        pad_width = ((extra_points, extra_points), (0, 0))  # Pad along rows
+    else:
+        pad_width = ((0, 0), (extra_points, extra_points))  # Pad along columns
+    
+    # Extend the matrix by repeating edge values
+    extended_matrix = np.pad(matrix, pad_width, mode='edge')
+    
+    # Apply Gaussian smoothing along the specified axis
+    smoothed_matrix = gaussian_filter1d(extended_matrix, sigma=sigma, axis=axis, mode='nearest')
+
+    # Keep the extended shape (no slicing)
+
+    # Adjust the x-axis array if provided
+    updated_x_axis = None
+    if x_axis is not None:
+        x_min, x_max = x_axis[0], x_axis[-1]
+        num_points = len(smoothed_matrix[0]) if axis == 1 else len(smoothed_matrix)
+        updated_x_axis = np.linspace(x_min - extra_space, x_max + extra_space, num_points)
+    
+    return smoothed_matrix, updated_x_axis
+
+
 
 
 def plot_I_sM_PDF(I,sM,PDF,s,r,title_I,title_sM,title_PDF):
@@ -904,10 +941,10 @@ def dI_I_from_trajectory(path_mol, mol_name, file_type, s_max=12, tstep = 0.5, p
     time_steps = len(time)
     if float(time[1])-float(time[0])!=0:
         t_interval = float(time[1])-float(time[0])
-        print(t_interval)
+        #print(t_interval)
     elif float(time[1])-float(time[0]) == 0:
         t_interval = tstep
-        print(t_interval)
+        #print(t_interval)
 
     I0,I0_at,I0_mol,s_new = get_I_from_xyz(coor_txyz[0],atom_sum, s_max)
     dI_I_t = []
@@ -935,7 +972,7 @@ def dI_I_from_trajectory(path_mol, mol_name, file_type, s_max=12, tstep = 0.5, p
     return dI_I_t, s, t_fs
 
     
-def trajectory_sim(path_mol, mol_name, file_type, s_max=12, tstep = 0.5, plot=False, return_data=False):
+def trajectory_sim(path_mol, mol_name, file_type, s_max=12, tstep=0.5, fwhm=60, plot=False, return_data=False):
     """ 
     Calculates the scattering and plots results of a trajectory simulation with a series of xyz coordinates and corresponding time steps.
     Uses the functions load_time_evolving_xyz, get_I_from_xyz, get_2d_matrix, and plot_delay_simulation_with_conv. 
@@ -962,45 +999,47 @@ def trajectory_sim(path_mol, mol_name, file_type, s_max=12, tstep = 0.5, plot=Fa
         see above
     """
 
-    coor_txyz, atom_sum, time=load_time_evolving_xyz(path_mol,mol_name,file_type) #load xyz data
+    coor_txyz, atom_sum, time=load_traj_xyz(path_mol,mol_name,file_type) #load xyz data
     #options: load_time_evolving_xyz, or load_time_evolving_xyz1
 
     time_steps = len(time)
-    if float(time[1])-float(time[0])!=0:
+    if isinstance(time[1], float) and not np.nan:
         t_interval = float(time[1])-float(time[0])
-        print(t_interval)
-    elif float(time[1])-float(time[0]) == 0:
+        #print(t_interval)
+    else:
         t_interval = tstep
-        print(t_interval)
-
-    col = int(160/t_interval)
-    space_for_convol = int(200/t_interval)
+        #print(t_interval)
+        time = np.arange(0, len(coor_txyz), 0.5)
+        #print(time)
 
         
     I0,I0_at,I0_mol,s_new = get_I_from_xyz(coor_txyz[0],atom_sum, s_max)
-    delta_I_over_I_t = get_2d_matrix(time_steps+space_for_convol*2,len(s_new))
+    dI_I_t = []
+    dI_I_conv = []
+    t_conv = []
 
     for i in range(time_steps):
         I,I_at,I_mol,s = get_I_from_xyz(coor_txyz[i],atom_sum, s_max)
-        delta_I_over_I_t[i+space_for_convol]=(I-I0)/I
-    
-    for i in range(space_for_convol):
-        delta_I_over_I_t[i+time_steps+space_for_convol]=delta_I_over_I_t[time_steps+space_for_convol-1]
-    
-    delta_I_over_I_t=np.array(delta_I_over_I_t)
-    t_fs = np.linspace(-space_for_convol, 1000+space_for_convol, len(delta_I_over_I_t))
-    if plot == True:
-        dI_I_conv = apply_conv(delta_I_over_I_t*100,len(s),col,t_interval,time_steps,space_for_convol, plot=True)
+        dI_I = (I-I0)/I
+        dI_I_t.append(dI_I)
 
+    dI_I_t = np.array(dI_I_t)
+    dI_I_c, t_conv = apply_gaussian_smoothing(dI_I_t, t_interval, fwhm=fwhm, x_axis=time)
+
+
+    dI_I_t = np.array(dI_I_t)
+    dI_I_conv = np.array(dI_I_c)
+    #print(dI_I_conv.shape)
+
+    if plot == True:
+        plt.figure()
+        plt.pcolormesh(dI_I_conv[0])
         plt.ylabel('s/angs^-1')
-        plt.yticks(np.arange(0,len(s),len(s)/s.max()),np.arange(0,s.max(),1))
-        plt.axvline(x=space_for_convol,linestyle='--')
         plt.title('delta_I/I')
         plt.show()
-    else:
-        dI_I_conv = apply_conv(delta_I_over_I_t*100, len(s), col, t_interval, time_steps, space_for_convol, plot=False)
+
     if return_data == True:
-        return delta_I_over_I_t, dI_I_conv.T, s, t_fs
+        return dI_I_t, dI_I_conv, s, t_conv
     else:
         return
 
@@ -1789,7 +1828,7 @@ def inspect_h5(file_name):
 
 ## Load x_ray form factors 
 form_factors={}
-with open('packages/x_ray_ff/atomic_FF_coeffs_clean.csv', 'r') as f:
+with open('C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Desktop\\gued\\packages\\x_ray_ff\\atomic_FF_coeffs_clean.csv', 'r') as f:
     lines = f.readlines()
     for line in lines:
         vals = line.split(',')
@@ -2240,7 +2279,7 @@ def dissoc_freq_sim_xray(path_mol, reactant, freq_xyz, file_type, other_xyz=None
     return dsM, pdf, np.array(r), new_time
 
 
-def trajectory_sim_xray(path_mol, mol_name, file_type, s_max=6, tstep = 0.5, plot=False, return_data=False):
+def trajectory_sim_xray(path_mol, mol_name, file_type, s_max=6, tstep = 0.5, fwhm=50, plot=False, return_data=False):
     """ 
     Calculates the xray scattering and plots results of a trajectory simulation with a series of xyz coordinates and corresponding time steps.
     Uses the functions load_time_evolving_xyz, get_I_xray, get_2d_matrix, and plot_delay_simulation_with_conv. 
@@ -2267,45 +2306,48 @@ def trajectory_sim_xray(path_mol, mol_name, file_type, s_max=6, tstep = 0.5, plo
         see above
     """
 
-    coor_txyz, atom_sum, time=load_time_evolving_xyz(path_mol,mol_name,file_type) #load xyz data
+    coor_txyz, atom_sum, time=load_traj_xyz(path_mol,mol_name,file_type) #load xyz data
     #options: load_time_evolving_xyz, or load_time_evolving_xyz1
-
+    #print(f"testing {time[1]}")
     time_steps = len(time)
-    if float(time[1])-float(time[0])!=0:
+    if isinstance(time[1], str) and not np.nan:
+
         t_interval = float(time[1])-float(time[0])
+        time = np.array(time)
         #print(t_interval)
-    elif float(time[1])-float(time[0]) == 0:
+    else:
         t_interval = tstep
         #print(t_interval)
-
-    col = int(160/t_interval)
-    space_for_convol = int(200/t_interval)
+        # time = np.arange(0, len(coor_txyz), 0.5) # TODO fix this issue with reading in times
+        #print(time)
 
         
-    I0,I0_at,I0_mol,s_new = get_I_xray(coor_txyz[0],atom_sum, s_max)
-    delta_I_over_I_t = get_2d_matrix(time_steps+space_for_convol*2,len(s_new))
+    I0,I0_at,I0_mol,q_0 = get_I_xray(coor_txyz[0],atom_sum, s_max)
+    dI_I_t = []
 
-    for i in range(time_steps):
-        I,I_at,I_mol,s = get_I_xray(coor_txyz[i],atom_sum, s_max)
-        delta_I_over_I_t[i+space_for_convol]=(I-I0)/I
+    for i in range(0,len(coor_txyz)):
+        I, _, _, _ = get_I_xray(coor_txyz[i], atom_sum, s_max=s_max)
+        dI_I = (I-I0)/I0
+        dI_I_t.append(dI_I)
     
-    for i in range(space_for_convol):
-        delta_I_over_I_t[i+time_steps+space_for_convol]=delta_I_over_I_t[time_steps+space_for_convol-1]
-    
-    delta_I_over_I_t=np.array(delta_I_over_I_t)
-    t_fs = np.linspace(-space_for_convol, 1000+space_for_convol, len(delta_I_over_I_t))
+    dI_I_t = np.array(dI_I_t)
+    dI_I_c, t_conv = apply_gaussian_smoothing(dI_I_t, t_interval, fwhm=fwhm, x_axis=time)
+
+
+    dI_I_t = np.array(dI_I_t)
+    dI_I_conv = np.array(dI_I_c)
+    #print(dI_I_conv.shape)
+
     if plot == True:
-        dI_I_conv = apply_conv(delta_I_over_I_t*100,len(s),col,t_interval,time_steps,space_for_convol, plot=True)
-
-        plt.ylabel('s/angs^-1')
-        plt.yticks(np.arange(0,len(s),len(s)/s.max()),np.arange(0,s.max(),1))
-        plt.axvline(x=space_for_convol,linestyle='--')
-        plt.title('delta_I/I')
+        plt.figure()
+        plt.pcolormesh(dI_I_conv[0])
+        # plt.ylabel('s/angs^-1')
+        # plt.title('delta_I/I')
         plt.show()
-    else:
-        dI_I_conv = apply_conv(delta_I_over_I_t*100, len(s), col, t_interval, time_steps, space_for_convol, plot=False)
+
     if return_data == True:
-        return delta_I_over_I_t, dI_I_conv.T, s, t_fs
+        print(f"testing again {len(time)}")
+        return dI_I_t, time, dI_I_conv, t_conv, q_0
     else:
         return
 
