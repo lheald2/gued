@@ -177,7 +177,7 @@ def import_DCS(max_at_no=55):
 FORM_FACTORS = import_DCS()
 S_THEORY = import_s()
 
-def load_molecular_structure(path_mol, mol_name, file_type = [], mol2_str = None):
+def load_molecular_structure(path_mol, mol_name, file_type, mol2_str = None):
     """ Reads in either a .csv or .xyz file containing moleculear coordinates and adds a column containing the atomic number using the 
     hidden function _get_modified_coor for each atom in the molecule. When reading in an .xyz file runs the hidden function _load_xyz. 
     Errors are thrown if an improper file type is chosen or if the .xyz or .csv file needs further formatting.
@@ -485,6 +485,35 @@ def _get_modified_coor(coor, atom_sum):
     return coor
     
 
+def get_bonds(coordinates, atom_sum):
+    """ Extracts atom pair distances for xyz coordinates"""
+    atom_ids = list(coordinates[:,0])
+    x = coordinates[:,1].astype(float)
+    y = coordinates[:,2].astype(float)
+    z = coordinates[:,3].astype(float)
+    #print(atom_ids)
+
+    connections = []
+    lengths = []
+    for i in range(0, atom_sum):
+        for j in range(i, atom_sum):
+            if i == j:
+                pass
+            else:
+                bond_length = ((x[i] - x[j]) ** 2 + (y[i] - y[j]) ** 2 + (z[i] - z[j]) ** 2)**0.5
+                lengths.append(bond_length)
+                connections.append((atom_ids[i]+str(i), atom_ids[j]+str(j)))
+
+        # if bond_length < max_bond_length:
+        #     #connections.append((atom_ids[i], atom_ids[j]))
+        #     print(atom_ids[i], atom_ids[j])
+        #     print(bond_length, max_bond_length)
+        #     lengths.append(bond_length)
+
+    lengths = np.array(lengths)
+    return connections, lengths
+
+
 def get_I_atomic(coor, atom_sum, s_val=12):
     """
     Calculates the I_atomic scattering pattern for the molecule of interest. 
@@ -633,7 +662,7 @@ def get_I_from_xyz(coor, atom_sum, s_val=12):
     return I, I_at, I_mol, s_new
 
 
-def get_sM_and_PDF_from_I(I_at,I_mol,s,r_max,damp_const):
+def get_sM_and_PDF_from_I(I_at, I_mol, s, r_max=8, damp_const=None):
     """ 
     Calculates the sM and PDF from the simulated I atomic and I molecular for the molecule of interest. 
     
@@ -661,16 +690,25 @@ def get_sM_and_PDF_from_I(I_at,I_mol,s,r_max,damp_const):
     """
 
     sM=I_mol/I_at*s #calculate sM from I
-    r_max = r_max * 1; # convert to picometer
-    r=range(r_max)
+    r=np.linspace(0, r_max, len(s))
     #print(r)
-    PDF=[0 for i in range(r_max)]
+    
+    
+    if damp_const == None:
+        damp_const = np.log(0.01)/(-1 * (np.max(s[np.max(np.where(s < 11)[0])]))**2)
+        print(f"damping constant = {damp_const}")
+    
+    damp_line = np.exp(-1*s**2*damp_const)
 
-    for i in range(len(s)-1): 
-        PDF+=sM[i]*np.sin(s[i]*1e10*np.array(r)*1e-12)*(s[i+1]-s[i])*np.exp(-s[i]**2/damp_const)
-    #for i in range(r_max):
-     #   PDF[i]+=sum(sM*np.sin(s*1e10*np.array(r[i])*1e-12)*(s[1]-s[0])*np.exp(-s**2/damp_const))
-
+    fr_temp = []
+    for j in range(len(r)):
+        #fr=np.nansum(sM_new*damp_line*np.sin(r_theory[j]*x_new))*ds
+        fr=np.nansum(sM*np.sin(r[j]*s)*damp_line)*(s[1]-s[0])
+        fr_temp.append(fr)
+    fr_temp = np.array(fr_temp)
+        #print(len(fr_temp))
+    PDF = fr_temp
+    #print(np.nanmax(PDF))
     return sM,PDF,np.array(r)
 
 
@@ -702,7 +740,7 @@ def apply_conv(matrix_before_conv,x_range,col,t_interval,nt,space_for_convol, pl
     return M1
 
 
-def apply_gaussian_smoothing(matrix, step_size, fwhm=100, axis=0, extra_space=None, x_axis=None):
+def apply_gaussian_smoothing(matrix, step_size, fwhm=50, axis=0, extra_space=None, x_axis=None):
     """
     Applies Gaussian smoothing along a specified axis of a 2D matrix,
     adding extra space at both ends to reduce edge effects and updating the x-axis accordingly.
@@ -732,9 +770,9 @@ def apply_gaussian_smoothing(matrix, step_size, fwhm=100, axis=0, extra_space=No
     
     # Define padding width
     if axis == 0:
-        pad_width = ((extra_points, extra_points), (0, 0))  # Pad along rows
+        pad_width = ((extra_points, 0), (0, 0))  # Pad along rows
     else:
-        pad_width = ((0, 0), (extra_points, extra_points))  # Pad along columns
+        pad_width = ((0, 0), (extra_points, 0))  # Pad along columns
     
     # Extend the matrix by repeating edge values
     extended_matrix = np.pad(matrix, pad_width, mode='edge')
@@ -749,11 +787,9 @@ def apply_gaussian_smoothing(matrix, step_size, fwhm=100, axis=0, extra_space=No
     if x_axis is not None:
         x_min, x_max = x_axis[0], x_axis[-1]
         num_points = len(smoothed_matrix[0]) if axis == 1 else len(smoothed_matrix)
-        updated_x_axis = np.linspace(x_min - extra_space, x_max + extra_space, num_points)
+        updated_x_axis = np.linspace(x_min - extra_space, x_max, num_points)
     
     return smoothed_matrix, updated_x_axis
-
-
 
 
 def plot_I_sM_PDF(I,sM,PDF,s,r,title_I,title_sM,title_PDF):
@@ -852,7 +888,7 @@ def load_time_evolving_xyz(path_mol, mol_name, file_type):
     return np.array(coor_txyz), atom_sum, time
 
 
-def static_sim(path_mol, mol_name, file_type, s_max = 12, r_max = 800, damp_const = 33, plot=True, return_data = False):
+def static_sim(path_mol, mol_name, file_type, s_max = 12, r_max = 8, damp_const = None, plot=True, return_data = False):
     """
     Calculates the static scattering of a molecule based on the structure. First, reads in the molecular structure using 
     load_molecular_structure then calculates the I atomic and I molecular using get_I_from_xyz. Then, using the I atomic and I molecular,
@@ -872,7 +908,7 @@ def static_sim(path_mol, mol_name, file_type, s_max = 12, r_max = 800, damp_cons
     s_max (int):
         Default set to 12 inverse angstroms. Defines the maximum scattering range for consideration
     r_max (int):
-        Default set to 800 (picometers). Defines the maximum r distance for consideration
+        Default set to 8 (angstroms). Defines the maximum r distance for consideration
     damp_const (int):
         Default set to 33. Defines the size of the damping constant used in the Fourier transform
     plot (boolean):
@@ -972,7 +1008,7 @@ def dI_I_from_trajectory(path_mol, mol_name, file_type, s_max=12, tstep = 0.5, p
     return dI_I_t, s, t_fs
 
     
-def trajectory_sim(path_mol, mol_name, file_type, s_max=12, tstep=0.5, fwhm=60, plot=False, return_data=False):
+def trajectory_sim(path_mol, mol_name, file_type, s_max=12, tstep=0.5, fwhm=150, plot=False, return_data=False):
     """ 
     Calculates the scattering and plots results of a trajectory simulation with a series of xyz coordinates and corresponding time steps.
     Uses the functions load_time_evolving_xyz, get_I_from_xyz, get_2d_matrix, and plot_delay_simulation_with_conv. 
@@ -1003,17 +1039,19 @@ def trajectory_sim(path_mol, mol_name, file_type, s_max=12, tstep=0.5, fwhm=60, 
     #options: load_time_evolving_xyz, or load_time_evolving_xyz1
 
     time_steps = len(time)
-    if isinstance(time[1], float) and not np.nan:
+    #time = np.array(time)
+    #print(time[1])
+    if time[1] is not np.nan:
         t_interval = float(time[1])-float(time[0])
         #print(t_interval)
     else:
         t_interval = tstep
         #print(t_interval)
-        time = np.arange(0, len(coor_txyz), 0.5)
+        time = np.arange(0, len(coor_txyz)/2, 0.5)
         #print(time)
 
         
-    I0,I0_at,I0_mol,s_new = get_I_from_xyz(coor_txyz[0],atom_sum, s_max)
+    I0,_,_,_ = get_I_from_xyz(coor_txyz[0],atom_sum, s_max)
     dI_I_t = []
     dI_I_conv = []
     t_conv = []
@@ -1039,12 +1077,12 @@ def trajectory_sim(path_mol, mol_name, file_type, s_max=12, tstep=0.5, fwhm=60, 
         plt.show()
 
     if return_data == True:
-        return dI_I_t, dI_I_conv, s, t_conv
+        return dI_I_t, time, dI_I_conv, t_conv, s
     else:
         return
 
 
-def freq_sim(path_mol, tra_mol_name, file_type, s_max=12, evolutions=10, r_max=800, damp_const=33, plot=True):
+def freq_sim(path_mol, tra_mol_name, file_type, s_max=12, evolutions=10, r_max=8, damp_const=33, plot=True):
     """
     Calculates the delta I/I and PDF for a frequency simulation done by ORCA and saved as a .hess file. Plots a set mumber of evolutions 
     of the vibrational mode. Uses functions load_freq_xyz, get_I_from_xyz, and get_sM_and_PDF_from_I
@@ -1065,7 +1103,7 @@ def freq_sim(path_mol, tra_mol_name, file_type, s_max=12, evolutions=10, r_max=8
     evolutions (int):
         Default set to 10. Defines the number of frequency iterations to calculate and plot
     r_max (int):
-        Default set to 800 (picometers). Defines the maximum r distance for consideration
+        Default set to 8 (angstroms). Defines the maximum r distance for consideration
     damp_const (int):
         Default set to 33. Defines the size of the damping constant used in the Fourier transform
     plot (boolean):
@@ -1129,7 +1167,7 @@ def freq_sim(path_mol, tra_mol_name, file_type, s_max=12, evolutions=10, r_max=8
     return dI_I, new_time, s, PDF, r
 
 
-def dissoc_sim(path_mol, reactant, products, file_type, s_max=12, r_max=800, damp_const=33, plot=False):
+def dissoc_sim(path_mol, reactant, products, file_type, s_max=12, r_max=8, damp_const=33, plot=False):
     """
     Calculates the diffraction pattern of a dissociation reaction (or just any kind of structural change) from 2 or more structure files.
     Uses funcitons load_molecular_structure, get_I_from_xyz, and get_sM_and_PDF_from_I
@@ -1152,7 +1190,7 @@ def dissoc_sim(path_mol, reactant, products, file_type, s_max=12, r_max=800, dam
     evolutions (int):
         Default set to 10. Defines the number of frequency iterations to calculate and plot
     r_max (int):
-        Default set to 800 (picometers). Defines the maximum r distance for consideration
+        Default set to 8 (angstroms). Defines the maximum r distance for consideration
     damp_const (int):
         Default set to 33. Defines the size of the damping constant used in the Fourier transform
     plot (boolean):
@@ -1209,9 +1247,25 @@ def dissoc_sim(path_mol, reactant, products, file_type, s_max=12, r_max=800, dam
         plt.legend()
         plt.title("PDF")
 
-    dPDF=[0 for i in range(r_max)]
-    for i in range(len(s)-1): 
-        dPDF+=dsM[i]*np.sin(s[i]*1e10*np.array(r)*1e-12)*(s[i+1]-s[i])*np.exp(-s[i]**2/damp_const)
+    dPDF=[0 for i in range(len(s))]
+    
+    if damp_const == None:
+        damp_const = np.log(0.01)/(-1 * (np.max(s[np.where(np.max(s < 11))[0]]))**2)
+    
+    damp_line = np.exp(-1*s**2*damp_const)
+
+    for i in range(len(sM)):
+        sM_new=sM[i]
+        #sM_new = sM[i]
+        fr_temp = []
+        #print(i)
+        for j in range(len(r)):
+            #fr=np.nansum(sM_new*damp_line*np.sin(r_theory[j]*x_new))*ds
+            fr=np.nansum(sM_new*np.sin(r[j]*s)*damp_line)*(s[1]-s[0])
+            fr_temp.append(fr)
+        fr_temp = np.array(fr_temp)
+        #print(len(fr_temp))
+        dPDF[i] = fr_temp
     
     return dsM, s, dPDF, r
 
@@ -1897,10 +1951,11 @@ def get_I_atomic_xray(coor, atom_sum, s_max):
             I_atomic.append(float(I_at))
         I_at_all.append(I_atomic)
     I_at = sum(np.array(I_at_all))
+    #print(f"I atomic = {I_atomic}")
     return I_at, s_new
 
 
-def get_I_molecular_xray(coor, atom_sum, s_max=12):
+def get_I_molecular_xray(coor, atom_sum, s_max):
     """
     Calculates the I_molecular x-ray scattering pattern for the molecule of interest. 
 
@@ -1942,6 +1997,11 @@ def get_I_molecular_xray(coor, atom_sum, s_max=12):
                 #print(len(amps_new_j))
                 I_mol[0]+=amps_i[0]*amps_j[0]
                 I_mol[1:len(s_new)]+=amps_i[1:len(s_new)]*amps_j[1:len(s_new)]*np.sin(s_new[1:len(s_new)]*r_ij)/s_new[1:len(s_new)]/r_ij
+    
+    nan_count = np.sum(np.isnan(I_mol))
+    if nan_count > 0:
+        print(f"number of nans in I_mol = {nan_count}")
+    
     return I_mol, s_new
 
 
@@ -1976,10 +2036,74 @@ def get_I_xray(coor, atom_sum, s_max=12):
     I_at, s_new = get_I_atomic_xray(coor, atom_sum, s_max)
     I_mol, _ = get_I_molecular_xray(coor, atom_sum, s_max)
     I = I_at + I_mol
+
+    nan_count = np.sum(np.isnan(I))
+    if nan_count > 0:
+        print(f"number of nans in I_total = {nan_count}")
     return I, I_at, I_mol, s_new
 
 
-def freq_sim_xray(path_mol, tra_mol_name, file_type, s_max=12, evolutions=10, r_max=800, plot=True):
+def static_sim_xray(path_mol, mol_name, file_type, s_max = 12, r_max = 8, damp_const = None, plot=True, return_data = False):
+    """
+    Calculates the static scattering of a molecule based on the structure. First, reads in the molecular structure using 
+    load_molecular_structure then calculates the I atomic and I molecular using get_I_from_xyz. Then, using the I atomic and I molecular,
+    calculated the sM and PDF using the get_sM_and_PDF_from_I function.
+    
+    ARGUMENTS:
+
+    path_mol (str):
+        path to the folder with the trajectory simulation
+    mol_name (str):
+        name of the xyz file
+    file_type (str):
+        '.xyz' or '.csv' but I think it only works with xyz currently 
+
+    OPTIONAL ARGUMENTS:
+
+    s_max (int):
+        Default set to 12 inverse angstroms. Defines the maximum scattering range for consideration
+    r_max (int):
+        Default set to 8 (angstroms). Defines the maximum r distance for consideration
+    damp_const (float or none):
+        Default set to None. If none, equals 1% at s max. Defines the size of the damping constant used in the Fourier transform
+    plot (boolean):
+        Default set to True. When true, plots the dI/I and PDF with respect to time and distance
+    return_data (boolean):
+        Default set to False. When true, returns I atomic, I molecular, s, sM, PDF, and r.
+        
+    """
+
+    coor, atom_sum  = load_molecular_structure(path_mol,mol_name,file_type)
+    _, I_at, I_mol, s_new = get_I_xray(coor, atom_sum, s_max)
+    sM, PDF, r_new = get_sM_and_PDF_from_I(I_at, I_mol, s_new, r_max, damp_const)
+    #print(np.nanmax(PDF))
+    if plot == True:
+        plt.figure(figsize=(8,4))
+            
+        plt.subplot(1,2,1)    
+        plt.plot(s_new,sM)
+        plt.xlabel(r'S, ['+angs+'$^{-1}$]')
+        plt.ylabel('sM(s)')
+        plt.title('Modified Scattering Intensity')
+        plt.grid()
+            
+        plt.subplot(1,2,2)    
+        plt.plot(r_new, PDF)
+        plt.xlabel(r'R, [pm]')
+        plt.ylabel('PDF')
+        plt.title('Pair Distribution Function')
+        plt.grid()
+            
+        plt.tight_layout()
+        plt.show()
+    
+    if return_data == True:
+        return I_at, I_mol, s_new, sM, PDF, r_new
+    else:
+        return
+    
+
+def freq_sim_xray(path_mol, tra_mol_name, file_type, s_max=12, ground_xyz = None, evolutions=10, r_max=8, plot=True):
     """
     Calculates the x-ray delta I/I and PDF for a frequency simulation done by ORCA and saved as a .hess file. Plots a set mumber of evolutions 
     of the vibrational mode. Uses functions load_freq_xyz, get_I_xray, and get_sM_and_PDF_from_I
@@ -2000,7 +2124,7 @@ def freq_sim_xray(path_mol, tra_mol_name, file_type, s_max=12, evolutions=10, r_
     evolutions (int):
         Default set to 10. Defines the number of frequency iterations to calculate and plot
     r_max (int):
-        Default set to 800 (picometers). Defines the maximum r distance for consideration
+        Default set to 8 (angstroms). Defines the maximum r distance for consideration
     damp_const (int):
         Default set to 33. Defines the size of the damping constant used in the Fourier transform
     plot (boolean):
@@ -2026,9 +2150,12 @@ def freq_sim_xray(path_mol, tra_mol_name, file_type, s_max=12, evolutions=10, r_
     new_time = np.linspace(0, max_time, nt)
     # col=int(160/t_interval)
     # space_for_convol=int(200/t_interval)
-    #[coor0,atom_sum0]  = load_static_mol_coor(path_mol,"CHBr3_opt",file_type); 
-    I0,I0_at,I0_mol,s = get_I_xray(coor_txyz[0],atom_sum, s_max)
-    #I0, I0_at, I0_mol, s = get_I_xray(coor0, atom_sum0, s_max)
+    if isinstance(ground_xyz, str):
+        coor0,atom_sum0  = load_molecular_structure(path_mol,ground_xyz,file_type)
+        I0, _, _, _ = get_I_xray(coor0, atom_sum0)
+    else:
+        I0,I0_at,I0_mol,s = get_I_xray(coor_txyz[0],atom_sum, s_max)
+
     dI_I= []
     PDF = []
     for i in range(nt):
@@ -2063,7 +2190,7 @@ def freq_sim_xray(path_mol, tra_mol_name, file_type, s_max=12, evolutions=10, r_
     return dI_I, new_time, s, PDF, r
 
 
-def dissoc_sim_xray(path_mol, reactant, products, file_type, s_max=12, r_max=800, plot=True):
+def dissoc_sim_xray(path_mol, reactant, products, file_type, s_max=12, r_max=8, plot=True):
     """
     Calculates the x-ray diffraction pattern of a dissociation reaction (or just any kind of structural change) from 2 or more structure files.
     Uses funcitons load_molecular_structure, get_I_xray, and get_sM_and_PDF_from_I
@@ -2086,9 +2213,9 @@ def dissoc_sim_xray(path_mol, reactant, products, file_type, s_max=12, r_max=800
     evolutions (int):
         Default set to 10. Defines the number of frequency iterations to calculate and plot
     r_max (int):
-        Default set to 800 (picometers). Defines the maximum r distance for consideration
-    damp_const (int):
-        Default set to 33. Defines the size of the damping constant used in the Fourier transform
+        Default set to 8 (angstroms). Defines the maximum r distance for consideration
+    damp_const (float or None):
+        Default set to None. If none, equals 1% at max s. Defines the size of the damping constant used in the Fourier transform
     plot (boolean):
         Default set to True. When true, plots the dI/I and PDF with respect to time and distance
 
@@ -2130,12 +2257,28 @@ def dissoc_sim_xray(path_mol, reactant, products, file_type, s_max=12, r_max=800
     r_max = r_max * 1; # convert to picometer
     r = np.arange(0, r_max, 1)    
     #print(r)
-    dPDF=[0 for i in range(len(r))]
 
     ds = s[1]-s[0]
     
-    for i in range(len(s)-1): 
-        dPDF+=dsM[i]*np.sin(s[i]*1e10*np.array(r)*1e-12)*ds*np.exp(-s[i]**2*damp_const)
+    dPDF=[0 for i in range(len(s))]
+    
+    if damp_const == None:
+        damp_const = np.log(0.01)/(-1 * (np.max(s[np.where(np.max(s < 11))[0]]))**2)
+    
+    damp_line = np.exp(-1*s**2*damp_const)
+
+    for i in range(len(dsM)):
+        sM_new=dsM[i]
+        #sM_new = sM[i]
+        fr_temp = []
+        #print(i)
+        for j in range(len(r)):
+            #fr=np.nansum(sM_new*damp_line*np.sin(r_theory[j]*x_new))*ds
+            fr=np.nansum(sM_new*np.sin(r[j]*s)*damp_line)*(s[1]-s[0])
+            fr_temp.append(fr)
+        fr_temp = np.array(fr_temp)
+        #print(len(fr_temp))
+        dPDF[i] = fr_temp
     
     if plot==True:
         plt.figure(figsize=(12,6))
@@ -2164,7 +2307,7 @@ def dissoc_sim_xray(path_mol, reactant, products, file_type, s_max=12, r_max=800
     return dsM, s, dPDF, r
 
 
-def dissoc_freq_sim_xray(path_mol, reactant, freq_xyz, file_type, other_xyz=None, r_max=800, conv=False, plot=True):
+def dissoc_freq_sim_xray(path_mol, reactant, freq_xyz, file_type, other_xyz=None, r_max=8, conv=False, plot=True, randomization_factor=None):
     """
     Simulates an x-ray scattering pattern following dissociation with a frequency simulation. Uses functions load_molecular_structure,
     get_I_xray, get_sM_and_PDF_from_I, and load_freq_xyz. The dissociation aspect is optional and can be specified with the other_xyz argument.
@@ -2185,7 +2328,7 @@ def dissoc_freq_sim_xray(path_mol, reactant, freq_xyz, file_type, other_xyz=None
     other_xyz (str):
         Default set to None. Name of other xyz file for dissociation
     r_max (int):
-        Default set to 800 (picometers). Defines the maximum r distance for consideration
+        Default set to 8 (angstroms). Defines the maximum r distance for consideration
     conv (boolean):
         Default set to False. When true, applies a gaussian filter to the PDF.
     plot (boolean):
@@ -2207,8 +2350,7 @@ def dissoc_freq_sim_xray(path_mol, reactant, freq_xyz, file_type, other_xyz=None
     
     coor_txyz,atom_sum,time = load_freq_xyz(path_mol,freq_xyz,file_type) #load xyz data
 
-
-    evolutions=10
+    evolutions=5
     nt=len(time)*evolutions
     max_time = max(time)*evolutions
     t_interval=float(time[1])-float(time[0])
@@ -2229,17 +2371,29 @@ def dissoc_freq_sim_xray(path_mol, reactant, freq_xyz, file_type, other_xyz=None
             I,_,_,_ = get_I_xray(coor_txyz[j],atom_sum)
             I_temp = I + I_frag
             I_prods.append(I_temp)
-        
-    dsM = s*(I_prods-I0)/I0_at
+    
+    I_prods = np.array(I_prods)
+
+    if isinstance(randomization_factor, float) or isinstance(randomization_factor, int):
+        offset = np.round(np.abs(np.random.normal(randomization_factor, (randomization_factor/2))), decimals=3)
+        print(f"Temporal offset is {offset}")
+        new_time = new_time + offset
+        new_time = np.concatenate((np.arange(0, offset, t_interval), new_time), axis=0)
+        temp = np.array([I0.copy() for _ in range(len(np.arange(0, offset, t_interval)))])
+        print(temp.shape, I_prods.shape)
+        I_prods = np.concatenate((temp, I_prods), axis=0)
+
+    dI_I = (I_prods-I0)/I0_at
+    dsM = s*dI_I
 
     ds = s[1]-s[0]
-    r=np.linspace(0,r_max/100,np.round(500))
+    r=np.linspace(0,r_max,np.round(500))
     damp_const = np.log(0.01)/(-1 * (np.max(s))**2)
     damp_line = np.exp(-1*s**2*damp_const)
     pdf = []
     
     for i in range(len(dsM)):
-        dsM_new=dsM[i]*np.exp(-ds*(s**2))
+        dsM_new=dsM[i]
         #sM_new = sM[i]
         fr_temp = []
         #print(i)
@@ -2254,7 +2408,9 @@ def dissoc_freq_sim_xray(path_mol, reactant, freq_xyz, file_type, other_xyz=None
     pdf = np.array(pdf)
 
     if conv == True:
-        pdf = gaussian_filter1d(pdf, sigma=50)
+        dI_I_conv, t_conv = apply_gaussian_smoothing(dI_I, ds, fwhm=50, extra_space=100, x_axis=s)
+    else:
+        dI_I_conv, t_conv = (np.nan, np.nan)
     if plot == True:
         plt.figure(figsize=(15,10))
 
@@ -2276,10 +2432,10 @@ def dissoc_freq_sim_xray(path_mol, reactant, freq_xyz, file_type, other_xyz=None
         plt.title("PDF")
         plt.show()
     
-    return dsM, pdf, np.array(r), new_time
+    return dI_I, new_time, dI_I_conv, t_conv, s, pdf, r
 
 
-def trajectory_sim_xray(path_mol, mol_name, file_type, s_max=6, tstep = 0.5, fwhm=50, plot=False, return_data=False):
+def trajectory_sim_xray(path_mol, mol_name, file_type, s_max=12, tstep = 0.5, fwhm=50, plot=False, return_data=False):
     """ 
     Calculates the xray scattering and plots results of a trajectory simulation with a series of xyz coordinates and corresponding time steps.
     Uses the functions load_time_evolving_xyz, get_I_xray, get_2d_matrix, and plot_delay_simulation_with_conv. 
@@ -2307,14 +2463,14 @@ def trajectory_sim_xray(path_mol, mol_name, file_type, s_max=6, tstep = 0.5, fwh
     """
 
     coor_txyz, atom_sum, time=load_traj_xyz(path_mol,mol_name,file_type) #load xyz data
+    #print(coor_txyz)
     #options: load_time_evolving_xyz, or load_time_evolving_xyz1
-    #print(f"testing {time[1]}")
+   # print(f"testing {time[1]}")
     time_steps = len(time)
     if isinstance(time[1], str) and not np.nan:
-
         t_interval = float(time[1])-float(time[0])
         time = np.array(time)
-        #print(t_interval)
+        print(t_interval)
     else:
         t_interval = tstep
         #print(t_interval)
@@ -2323,6 +2479,7 @@ def trajectory_sim_xray(path_mol, mol_name, file_type, s_max=6, tstep = 0.5, fwh
 
         
     I0,I0_at,I0_mol,q_0 = get_I_xray(coor_txyz[0],atom_sum, s_max)
+    #print(I0)
     dI_I_t = []
 
     for i in range(0,len(coor_txyz)):
@@ -2340,7 +2497,8 @@ def trajectory_sim_xray(path_mol, mol_name, file_type, s_max=6, tstep = 0.5, fwh
 
     if plot == True:
         plt.figure()
-        plt.pcolormesh(dI_I_conv[0])
+        plt.pcolormesh(q_0, t_conv, dI_I_conv)
+        plt.colorbar()
         # plt.ylabel('s/angs^-1')
         # plt.title('delta_I/I')
         plt.show()

@@ -90,13 +90,13 @@ import matplotlib.pyplot as plt
 
 
 # Define saving details
-file_label = "QC_Trajectories"
+file_label = "NB_Trajectories"
 today = date.today()
 print(today)
 main_path = "C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\"
 #file_path = 'C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\SLAC\\Bromoform Experiment\\'
 file_path = main_path + 'QC data and code\\Theory Structures\\'
-file_name = file_path + f"{file_label}_{today}.h5"
+file_name = file_path + f"{file_label}.h5"
 print(f"writing data to {file_name}")
 
 group_name = "s2"
@@ -104,7 +104,7 @@ group_name = "s2"
 # Define the folder path to the trajectory files
 #path_traj = "C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Documents\\Centurion Lab\\SLAC\\Bromoform Experiment\\traj_113\\"
 
-path_traj = main_path + "QC data and code\\Theory Structures\\QC\\Singlet_2\\*\\"
+path_traj = main_path + "QC data and code\\Theory Structures\\NB\\Singlet_2\\*\\"
 mol_name = 'output'
 file_type = ".xyz"
 
@@ -120,19 +120,15 @@ print(f"Processing {len(files)} trajectory files.")
 
 for i, file in enumerate(files[:]):
     string = list(map(str, file.split("\\")))
-    print(f"getting data for trajectory {i} of {len(files)} : {string[-2][-4:]}")
+    print(f"getting data for trajectory {i+1}/{len(files)} : {string[-2][-5:]}")
     #print(string[-2][-4:])
     path_mol = file[:-10]
     #print(path_mol)
-    dI_I_raw, _, dI_I_conv, s, t_fs = gt.trajectory_sim(path_mol, mol_name, file_type, return_data=True)
+    dI_I_raw, t_raw, dI_I_conv, t_conv, s = gt.trajectory_sim(path_mol, mol_name, file_type, return_data=True)
     # print(f"dI conv has shape of {dI_I_conv.shape}")
-    # plt.figure()
-    # plt.pcolormesh(s, t_fs, dI_I_conv, cmap="bwr")
-    # plt.clim(-0.25, 0.25)
-    # plt.colorbar()
-    # plt.show()
-    data_dictionary = {"dI_I_raw": dI_I_raw, "dI_I_conv":dI_I_conv, "s": s, "time": t_fs}
-    gt.save_data(file_name, group_name, string[-2][-4:], data_dictionary)
+
+    data_dictionary = {"dI_I_raw": dI_I_raw, "time_raw": t_raw, "dI_I_conv":dI_I_conv, "s": s, "time": t_conv}
+    gt.save_data(file_name, group_name, string[-2][-5:], data_dictionary)
 
 stop = time.perf_counter()
 print(f"Finished processing {len(files)} trajectories in {((stop-start)/60):.2f} minutes")

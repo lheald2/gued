@@ -2170,7 +2170,7 @@ def save_data(file_name, group_name, run_number, data_dict, group_note=None):
             group.create_dataset(run_dataset_name, data=data)
 
         f.close()         
-    print(f"Data for run {run_number} saved to group '{group_name}' in {file_name} successfully.")
+    print(f"Data for run {run_number} saved to group '{group_name}' successfully.")
     return
 
 
@@ -2201,7 +2201,7 @@ def add_to_h5(file_name, group_name, var_data_dict, run_number=None):
         if run_number == None:
             for var_name, var_data in var_data_dict.items():
                 group.create_dataset(var_name, data=var_data)
-                print(f"Varriable '{var_name}' added to group '{group_name}' successfully.")
+                print(f"Variable '{var_name}' added to group '{group_name}' successfully.")
             f.close()
             return
         else:
