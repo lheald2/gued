@@ -343,7 +343,7 @@ def load_freq_xyz(path_mol, mol_name, file_type):
     return coor, atom_sum, time
 
 
-def load_traj_xyz(path_mol, mol_name, file_type):
+def load_traj_xyz(path_mol, mol_name, file_type, step_size=None):
     """
     Reads in a simulated trajectory .xyz file containing many structures which evolve over time generated from programs such as Gaussian or
     ORCA. The file also sometimes contains information on the time points for each structural evolution.
@@ -386,10 +386,14 @@ def load_traj_xyz(path_mol, mol_name, file_type):
         temp = []
         lines = np.arange(groups[j] + 2, groups[j] + iteration)
         #print(text[j+1])
-        try:
-            times.append(float(text[groups[j]+1]))
-        except:
-            times.append(np.nan)
+        if step_size == None:
+            try:
+                times.append(float(text[groups[j]+1]))
+            except:
+                times.append(np.nan)
+                
+        elif isinstance(step_size, float):
+            times.append(step_size*j)
 
         for line in lines:
             string = list(map(str, text[line].split()))
