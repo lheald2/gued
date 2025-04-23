@@ -774,12 +774,12 @@ def apply_gaussian_smoothing(matrix, step_size, fwhm=50, axis=0, extra_space=Non
     
     # Define padding width
     if axis == 0:
-        pad_width = ((extra_points, 0), (0, 0))  # Pad along rows
+        pad_width = ((extra_points, extra_points), (0, 0))  # Pad along rows
     else:
-        pad_width = ((0, 0), (extra_points, 0))  # Pad along columns
+        pad_width = ((0, 0), (extra_points, extra_points))  # Pad along columns
     
     # Extend the matrix by repeating edge values
-    extended_matrix = np.pad(matrix, pad_width, mode='edge')
+    extended_matrix = np.pad(matrix, pad_width, mode='linear_ramp')
     
     # Apply Gaussian smoothing along the specified axis
     smoothed_matrix = gaussian_filter1d(extended_matrix, sigma=sigma, axis=axis, mode='nearest')
@@ -791,7 +791,7 @@ def apply_gaussian_smoothing(matrix, step_size, fwhm=50, axis=0, extra_space=Non
     if x_axis is not None:
         x_min, x_max = x_axis[0], x_axis[-1]
         num_points = len(smoothed_matrix[0]) if axis == 1 else len(smoothed_matrix)
-        updated_x_axis = np.linspace(x_min - extra_space, x_max, num_points)
+        updated_x_axis = np.linspace(x_min - extra_space, x_max+extra_space, num_points)
     
     return smoothed_matrix, updated_x_axis
 
