@@ -332,6 +332,7 @@ def load_freq_xyz(path_mol, mol_name, file_type):
         lines = np.arange(groups[j] + 2, groups[j] + iteration)
         for line in lines:
             string = list(map(str, text[line].split()))
+            string[0] = string[0].capitalize()
             atom_num = sym_to_no(string[0])
             info = string[0:4] + [str(atom_num)]
             temp.append(info)
@@ -397,6 +398,7 @@ def load_traj_xyz(path_mol, mol_name, file_type, step_size=None):
 
         for line in lines:
             string = list(map(str, text[line].split()))
+            string[0] = string[0].capitalize()
             atom_num = sym_to_no(string[0])
             info = string[0:4] + [str(atom_num)]
             temp.append(info)
@@ -450,6 +452,7 @@ def load_hot_xyz(path_mol, mol_name, file_type):
         lines = np.arange(groups[j] + 2, groups[j] + iteration)
         for line in lines:
             string = list(map(str, text[line].split()))
+            string[0] = string[0].capitalize()
             atom_num = sym_to_no(string[0])
             info = string[0:4] + [str(atom_num)]
             temp.append(info)
@@ -1886,7 +1889,7 @@ def inspect_h5(file_name):
 
 ## Load x_ray form factors 
 form_factors={}
-with open('C:\\Users\\laure\\OneDrive - University of Nebraska-Lincoln\\Desktop\\gued\\packages\\x_ray_ff\\atomic_FF_coeffs_clean.csv', 'r') as f:
+with open('C:\\Users\\laure\\OneDrive - University of Nebraska\\Desktop\\gued\\packages\\x_ray_ff\\atomic_FF_coeffs_clean.csv', 'r') as f:
     lines = f.readlines()
     for line in lines:
         vals = line.split(',')
