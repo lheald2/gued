@@ -669,7 +669,7 @@ def get_I_from_xyz(coor, atom_sum, s_val=12):
     return I, I_at, I_mol, s_new
 
 
-def get_sM_and_PDF_from_I(I_at, I_mol, s, r_max=8, damp_const=None):
+def get_sM_and_PDF_from_I(I_at, I_mol, s, r_max=8, damp_const=None, conv=None):
     """ 
     Calculates the sM and PDF from the simulated I atomic and I molecular for the molecule of interest. 
     
@@ -696,9 +696,16 @@ def get_sM_and_PDF_from_I(I_at, I_mol, s, r_max=8, damp_const=None):
         radial values corresponding to the PDF
     """
 
-    sM=I_mol/I_at*s #calculate sM from I
+    sM_temp=I_mol/I_at*s #calculate sM from I
+    ds = s[1]-s[0]
     r=np.linspace(0, r_max, len(s))
     #print(r)
+
+    if isinstance(conv, int) or isinstance(conv, float) == True:
+        sM, s = apply_gaussian_smoothing(sM_temp, ds, fwhm=conv, axis=0, x_axis=s)
+    else:
+        sM = sM_temp
+        s = s
     
     
     if damp_const == None:
@@ -716,7 +723,7 @@ def get_sM_and_PDF_from_I(I_at, I_mol, s, r_max=8, damp_const=None):
         #print(len(fr_temp))
     PDF = fr_temp
     #print(np.nanmax(PDF))
-    return sM,PDF,np.array(r)
+    return sM, s, PDF,np.array(r)
 
 
 def apply_conv(matrix_before_conv,x_range,col,t_interval,nt,space_for_convol, plot=False):
@@ -777,7 +784,7 @@ def apply_gaussian_smoothing(matrix, step_size, fwhm=50, axis=0, extra_space=Non
     
     # Define padding width
     if axis == 0:
-        pad_width = ((extra_points, extra_points), (0, 0))  # Pad along rows
+        pad_width = ((extra_points, extra_points))  # Pad along rows
     else:
         pad_width = ((0, 0), (extra_points, extra_points))  # Pad along columns
     
@@ -927,7 +934,7 @@ def static_sim(path_mol, mol_name, file_type, s_max = 12, r_max = 8, damp_const 
 
     coor, atom_sum  = load_molecular_structure(path_mol,mol_name,file_type)
     _, I_at, I_mol, s_new = get_I_from_xyz(coor, atom_sum, s_max)
-    sM, PDF, r_new = get_sM_and_PDF_from_I(I_at, I_mol, s_new, r_max, damp_const)
+    sM, s_new, PDF, r_new = get_sM_and_PDF_from_I(I_at, I_mol, s_new, r_max, damp_const)
 
     if plot == True:
         plt.figure(figsize=(8,4))
@@ -2050,7 +2057,7 @@ def get_I_xray(coor, atom_sum, s_max=12):
     return I, I_at, I_mol, s_new
 
 
-def static_sim_xray(path_mol, mol_name, file_type, s_max = 12, r_max = 8, damp_const = None, plot=True, return_data = False):
+def static_sim_xray(path_mol, mol_name, file_type, s_max = 12, r_max = 8, damp_const = None, conv=False, plot=True, return_data = False):
     """
     Calculates the static scattering of a molecule based on the structure. First, reads in the molecular structure using 
     load_molecular_structure then calculates the I atomic and I molecular using get_I_from_xyz. Then, using the I atomic and I molecular,
@@ -2082,7 +2089,7 @@ def static_sim_xray(path_mol, mol_name, file_type, s_max = 12, r_max = 8, damp_c
 
     coor, atom_sum  = load_molecular_structure(path_mol,mol_name,file_type)
     _, I_at, I_mol, s_new = get_I_xray(coor, atom_sum, s_max)
-    sM, PDF, r_new = get_sM_and_PDF_from_I(I_at, I_mol, s_new, r_max, damp_const)
+    sM, s_new, PDF, r_new = get_sM_and_PDF_from_I(I_at, I_mol, s_new, r_max, damp_const, conv=conv)
     #print(np.nanmax(PDF))
     if plot == True:
         plt.figure(figsize=(8,4))
